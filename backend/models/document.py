@@ -1,0 +1,13 @@
+from backend.database.database import Base
+from sqlalchemy import Column, Integer, String, DateTime
+import datetime
+
+class Document(Base):
+    __tablename__ = "documents"
+
+    id = Column(Integer, primary_key=True)
+    filename = Column(String, nullable=False)
+    file_type = Column(String, nullable=False)
+    storage_path = Column(String, nullable=False)
+    file_status = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
