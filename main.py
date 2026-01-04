@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from backend.routers import user, document, report, chat, session, ai
+import backend.database.init_db
 
 app = FastAPI(title="InsightAI")
 
