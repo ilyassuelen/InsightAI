@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, HTTPException
+from fastapi import APIRouter, UploadFile, HTTPException, Body
 from pathlib import Path
 from uuid import uuid4
 from backend.database.database import SessionLocal
@@ -9,9 +9,31 @@ router = APIRouter()
 @router.get("/")
 def get_documents():
     """
-    Retrieve a list of all documents for a user.
+    Retrieve a list of all documents in the database.
     """
-    return {"message": "List all documents"}
+    db = SessionLocal()
+    try:
+        documents = db.query(Document).all()
+        return [
+            {
+                "id": document.id,
+                "filename": document.filename,
+                "file_type": document.file_type,
+                "storage_path": document.storage_path,
+                "file_status": document.file_status,
+                "created_at": document.created_at
+            }
+            for document in documents
+        ]
+
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch documents"
+        )
+
+    finally:
+        db.close()
 
 @router.post("/upload")
 def upload_document(file: UploadFile):
@@ -69,18 +91,102 @@ def get_document(id: int):
     """
     Retrieve a document by its ID.
     """
-    return {"message": f"Get document {id}"}
+    db = SessionLocal()
+    try:
+        document = db.query(Document).filter(Document.id == id).first()
+        if not document:
+            raise HTTPException(
+                status_code=404,
+                detail="Document not found"
+            )
+
+        return {
+            "id": document.id,
+            "filename": document.filename,
+            "file_type": document.file_type,
+            "storage_path": document.storage_path,
+            "file_status": document.file_status,
+            "created_at": document.created_at
+        }
+
+    finally:
+        db.close()
 
 @router.patch("/{id}")
-def update_document(id: int):
+def update_document(id: int, filename: str | None = Body(default=None), file_status: str | None = Body(default=None)):
     """
-    Update document metadata for a given ID.
+    Update document metadata (filename or file_status) for a given ID.
     """
-    return {"message": f"Update document {id}"}
+    db = SessionLocal()
+    try:
+        document = db.query(Document).filter(Document.id == id).first()
+        if not document:
+            raise HTTPException(
+                status_code=404,
+                detail="Document not found"
+            )
+
+        if filename:
+            document.filename = filename
+        if file_status:
+            document.file_status = file_status
+
+        db.commit()
+        db.refresh(document)
+
+        return {
+            "message": f"Document with ID: {id} updated successfully",
+            "document": {
+                "id": document.id,
+                "filename": document.filename,
+                "file_type": document.file_type,
+                "storage_path": document.storage_path,
+                "file_status": document.file_status,
+                "created_at": document.created_at
+            }
+        }
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update document: {str(e)}"
+        )
+
+    finally:
+        db.close()
 
 @router.delete("/{id}")
 def delete_document(id: int):
     """
     Delete a document by its ID.
     """
-    return {"message": f"Delete document {id}"}
+    db = SessionLocal()
+    try:
+        document = db.query(Document).filter(Document.id == id).first()
+        if not document:
+            raise HTTPException(
+                status_code=404,
+                detail="Document not found"
+            )
+
+        # Delete file on file system, if it exists.
+        filepath = Path(document.storage_path)
+        if filepath.exists():
+            filepath.unlink()
+
+        # Delete Database entry
+        db.delete(document)
+        db.commit()
+
+        return {"message": f"Document with ID: {id} deleted successfully"}
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete document: {str(e)}"
+        )
+
+    finally:
+        db.close()
