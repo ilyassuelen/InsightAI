@@ -1,5 +1,6 @@
 from backend.database.database import Base
 from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy.orm import relationship
 import datetime
 
 class Document(Base):
@@ -11,3 +12,4 @@ class Document(Base):
     storage_path = Column(String, nullable=False)
     file_status = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    parses = relationship("DocumentParse", back_populates="document", cascade="all, delete-orphan")
