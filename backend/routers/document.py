@@ -3,6 +3,7 @@ from pathlib import Path
 from uuid import uuid4
 from backend.database.database import SessionLocal
 from backend.models.document import Document
+from backend.parsers.pdf_parser import parse_document
 
 router = APIRouter()
 
@@ -39,7 +40,7 @@ def get_documents():
 def upload_document(file: UploadFile):
     """
     Upload a new document, save it to the filesystem,
-    and create a database entry.
+    create a database entry, and automatically parse it.
     """
     # Create Location
     storage_dir = Path("backend/storage/documents")
@@ -66,8 +67,18 @@ def upload_document(file: UploadFile):
         db.commit()
         db.refresh(document)
 
+        # Call parser
+        try:
+            parse_document(document_id=document.id, file_path=str(filepath))
+        except HTTPException as e:
+            return {
+                "message": "Document uploaded, but parsing failed",
+                "document_id": document.id,
+                "parsing_error": e.detail
+            }
+
         return {
-            "message": "Document uploaded successfully",
+            "message": "Document uploaded and parsed successfully",
             "document_id": document.id
         }
 
