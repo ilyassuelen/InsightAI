@@ -6,3 +6,4 @@ openai
 pydantic
 python-multipart
 docling
+tiktoken

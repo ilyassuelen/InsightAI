@@ -4,6 +4,11 @@ from uuid import uuid4
 from backend.database.database import SessionLocal
 from backend.models.document import Document
 from backend.parsers.pdf_parser import parse_document
+from backend.services.chunking_service import chunk_text, MAX_TOKENS
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -40,7 +45,7 @@ def get_documents():
 def upload_document(file: UploadFile):
     """
     Upload a new document, save it to the filesystem,
-    create a database entry, and automatically parse it.
+    create a database entry, parse it, and chunk the text.
     """
     # Create Location
     storage_dir = Path("backend/storage/documents")
@@ -66,31 +71,58 @@ def upload_document(file: UploadFile):
         db.add(document)
         db.commit()
         db.refresh(document)
+        logger.info(f"Uploaded file '{file.filename}' as document ID {document.id}")
 
         # Call parser
         try:
-            parse_document(document_id=document.id, file_path=str(filepath))
+            doc_parse = parse_document(document_id=document.id, file_path=str(filepath))
+            logger.info(f"Document ID {document.id} parsed successfully")
         except HTTPException as e:
+            logger.warning(f"Parsing failed for document ID {document.id}: {e.detail}")
             return {
                 "message": "Document uploaded, but parsing failed",
                 "document_id": document.id,
                 "parsing_error": e.detail
             }
 
+        # Update status after parsing
+        document.file_status = "parsed"
+        db.commit()
+
+        # Call chunking
+        if not doc_parse.full_text.strip():
+            logger.warning(f"Document ID {document.id} has empty text after parsing")
+            num_chunks = 0
+            document.file_status = "parsed_empty"
+            db.commit()
+        else:
+            num_chunks = chunk_text(
+                document_id=document.id,
+                parse_id=doc_parse.id,
+                text=doc_parse.full_text,
+                max_tokens=MAX_TOKENS
+            )
+            document.file_status = "chunked"
+            db.commit()
+            logger.info(f"Created {num_chunks} chunks for document ID {document.id}")
+
         return {
             "message": "Document uploaded and parsed successfully",
-            "document_id": document.id
+            "document_id": document.id,
+            "chunks_created": num_chunks
         }
 
-    except Exception:
+    except Exception as e:
         db.rollback()
 
         if filepath.exists():
             filepath.unlink()
 
+        logger.error(f"Failed to upload document '{file.filename}': {str(e)}")
+
         raise HTTPException(
             status_code=500,
-            detail="Document upload failed"
+            detail=f"Document upload failed: {str(e)}"
         )
 
     finally:
