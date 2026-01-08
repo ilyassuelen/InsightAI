@@ -5,6 +5,7 @@ from backend.database.database import SessionLocal
 from backend.models.document import Document
 from backend.parsers.pdf_parser import parse_document
 from backend.services.chunking_service import chunk_text, MAX_TOKENS
+from backend.services.document_block_service import create_blocks_from_chunks
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -45,7 +46,7 @@ def get_documents():
 def upload_document(file: UploadFile):
     """
     Upload a new document, save it to the filesystem,
-    create a database entry, parse it, and chunk the text.
+    create a database entry, parse it, chunk the text and create blocks.
     """
     # Create Location
     storage_dir = Path("backend/storage/documents")
@@ -89,10 +90,11 @@ def upload_document(file: UploadFile):
         document.file_status = "parsed"
         db.commit()
 
-        # Call chunking
+        # Chunking
         if not doc_parse.full_text.strip():
             logger.warning(f"Document ID {document.id} has empty text after parsing")
             num_chunks = 0
+            num_blocks = 0
             document.file_status = "parsed_empty"
             db.commit()
         else:
@@ -106,10 +108,21 @@ def upload_document(file: UploadFile):
             db.commit()
             logger.info(f"Created {num_chunks} chunks for document ID {document.id}")
 
+            # Blocks
+            num_blocks = create_blocks_from_chunks(
+                document_id=document.id,
+                parse_id=doc_parse.id
+            )
+            logger.info(f"Created {num_blocks} blocks for document ID {document.id}")
+
+            document.file_status = "blocked"
+            db.commit()
+
         return {
-            "message": "Document uploaded and parsed successfully",
+            "message": "Document uploaded, parsed, chunked, and blocked successfully",
             "document_id": document.id,
-            "chunks_created": num_chunks
+            "chunks_created": num_chunks,
+            "blocks_created": num_blocks
         }
 
     except Exception as e:
