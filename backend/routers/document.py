@@ -6,6 +6,7 @@ from backend.models.document import Document
 from backend.parsers.pdf_parser import parse_document
 from backend.services.chunking_service import chunk_text, MAX_TOKENS
 from backend.services.document_block_service import create_blocks_from_chunks
+from backend.services.structured_block_service import structure_blocks
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -45,8 +46,7 @@ def get_documents():
 @router.post("/upload")
 def upload_document(file: UploadFile):
     """
-    Upload a new document, save it to the filesystem,
-    create a database entry, parse it, chunk the text and create blocks.
+    Upload a new document, parse it, chunk text, create blocks, and structure blocks with LLM.
     """
     # Create Location
     storage_dir = Path("backend/storage/documents")
@@ -74,7 +74,7 @@ def upload_document(file: UploadFile):
         db.refresh(document)
         logger.info(f"Uploaded file '{file.filename}' as document ID {document.id}")
 
-        # Call parser
+        # Parser
         try:
             doc_parse = parse_document(document_id=document.id, file_path=str(filepath))
             logger.info(f"Document ID {document.id} parsed successfully")
@@ -86,7 +86,6 @@ def upload_document(file: UploadFile):
                 "parsing_error": e.detail
             }
 
-        # Update status after parsing
         document.file_status = "parsed"
         db.commit()
 
@@ -95,6 +94,7 @@ def upload_document(file: UploadFile):
             logger.warning(f"Document ID {document.id} has empty text after parsing")
             num_chunks = 0
             num_blocks = 0
+            structured_results = []
             document.file_status = "parsed_empty"
             db.commit()
         else:
@@ -115,14 +115,22 @@ def upload_document(file: UploadFile):
             )
             logger.info(f"Created {num_blocks} blocks for document ID {document.id}")
 
-            document.file_status = "blocked"
+            # LLM-based Structure
+            structured_results = structure_blocks(
+                document_id=document.id,
+                parse_id=doc_parse.id
+            )
+            logger.info(f"Structured {len(structured_results)} blocks with LLM for document ID {document.id}")
+
+            document.file_status = "structured"
             db.commit()
 
         return {
-            "message": "Document uploaded, parsed, chunked, and blocked successfully",
+            "message": "Document uploaded, parsed, chunked, blocked, and structured successfully",
             "document_id": document.id,
             "chunks_created": num_chunks,
-            "blocks_created": num_blocks
+            "blocks_created": num_blocks,
+            "structured_blocks": structured_results
         }
 
     except Exception as e:
