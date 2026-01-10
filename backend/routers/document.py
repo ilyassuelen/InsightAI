@@ -1,15 +1,14 @@
 from fastapi import APIRouter, UploadFile, HTTPException, Body
 from pathlib import Path
 from uuid import uuid4
+import logging
 from backend.database.database import SessionLocal
 from backend.models.document import Document
 from backend.parsers.pdf_parser import parse_document
 from backend.services.chunking_service import chunk_text, MAX_TOKENS
 from backend.services.document_block_service import create_blocks_from_chunks
 from backend.services.structured_block_service import structure_blocks
-import logging
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -44,9 +43,14 @@ def get_documents():
         db.close()
 
 @router.post("/upload")
-def upload_document(file: UploadFile):
+async def upload_document(file: UploadFile):
     """
-    Upload a new document, parse it, chunk text, create blocks, and structure blocks with LLM.
+    Async upload and process a document:
+    - store file
+    - parse file (sync)
+    - chunk text (sync)
+    - create blocks (sync)
+    - structure blocks with LLM (async and parallel)
     """
     # Create Location
     storage_dir = Path("backend/storage/documents")
@@ -60,7 +64,7 @@ def upload_document(file: UploadFile):
 
     try:
         with open(filepath, "wb") as f:
-            f.write(file.file.read())
+            f.write(await file.read())
 
         document = Document(
             filename=file.filename,
@@ -74,80 +78,69 @@ def upload_document(file: UploadFile):
         db.refresh(document)
         logger.info(f"Uploaded file '{file.filename}' as document ID {document.id}")
 
-        # Parser
-        try:
-            doc_parse = parse_document(document_id=document.id, file_path=str(filepath))
-            logger.info(f"Document ID {document.id} parsed successfully")
-        except HTTPException as e:
-            logger.warning(f"Parsing failed for document ID {document.id}: {e.detail}")
-            return {
-                "message": "Document uploaded, but parsing failed",
-                "document_id": document.id,
-                "parsing_error": e.detail
-            }
-
+        # Parsing (sync)
+        doc_parse = parse_document(document_id=document.id, file_path=str(filepath))
         document.file_status = "parsed"
         db.commit()
 
-        # Chunking
         if not doc_parse.full_text.strip():
-            logger.warning(f"Document ID {document.id} has empty text after parsing")
-            num_chunks = 0
-            num_blocks = 0
-            structured_results = []
             document.file_status = "parsed_empty"
             db.commit()
-        else:
-            num_chunks = chunk_text(
-                document_id=document.id,
-                parse_id=doc_parse.id,
-                text=doc_parse.full_text,
-                max_tokens=MAX_TOKENS
-            )
-            document.file_status = "chunked"
-            db.commit()
-            logger.info(f"Created {num_chunks} chunks for document ID {document.id}")
+            return {
+                "message": "Document parsed but contains no text",
+                "document_id": document.id,
+            }
 
-            # Blocks
-            num_blocks = create_blocks_from_chunks(
-                document_id=document.id,
-                parse_id=doc_parse.id
-            )
-            logger.info(f"Created {num_blocks} blocks for document ID {document.id}")
+        # Chunking (sync)
+        num_chunks = chunk_text(
+            document_id=document.id,
+            parse_id=doc_parse.id,
+            text=doc_parse.full_text,
+            max_tokens=MAX_TOKENS,
+        )
 
-            # LLM-based Structure
-            structured_results = structure_blocks(
-                document_id=document.id,
-                parse_id=doc_parse.id
-            )
-            logger.info(f"Structured {len(structured_results)} blocks with LLM for document ID {document.id}")
+        document.file_status = "chunked"
+        db.commit()
+        logger.info(f"Created {num_chunks} chunks for document ID {document.id}")
 
-            document.file_status = "structured"
-            db.commit()
+        # Blocks
+        num_blocks = create_blocks_from_chunks(
+            document_id=document.id,
+            parse_id=doc_parse.id,
+        )
+        logger.info(f"Created {num_blocks} blocks for document ID {document.id}")
+
+        # LLM structuring (async and parallel)
+        structured_blocks = await structure_blocks(
+            document_id=document.id,
+            parse_id=doc_parse.id,
+        )
+
+        document.file_status = "structured"
+        db.commit()
 
         return {
-            "message": "Document uploaded, parsed, chunked, blocked, and structured successfully",
+            "message": "Document processed successfully",
             "document_id": document.id,
             "chunks_created": num_chunks,
             "blocks_created": num_blocks,
-            "structured_blocks": structured_results
+            "structured_blocks": structured_blocks,
         }
 
     except Exception as e:
         db.rollback()
+        logger.exception(f"Upload failed: {e}")
 
         if filepath.exists():
             filepath.unlink()
 
-        logger.error(f"Failed to upload document '{file.filename}': {str(e)}")
-
         raise HTTPException(
             status_code=500,
-            detail=f"Document upload failed: {str(e)}"
+            detail="Document upload failed",
         )
 
     finally:
-        file.file.close()
+        await file.close()
         db.close()
 
 @router.get("/{id}")

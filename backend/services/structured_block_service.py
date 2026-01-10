@@ -1,24 +1,98 @@
 import os
 import json
+import asyncio
+import logging
+from typing import List, Dict
 from dotenv import load_dotenv
+from openai import AsyncOpenAI
 from backend.database.database import SessionLocal
 from backend.models.document_block import DocumentBlock
-from typing import List, Dict
-from openai import OpenAI
 
 load_dotenv()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+logger = logging.getLogger(__name__)
 
-def structure_blocks(document_id: int, parse_id: int) -> List[Dict]:
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# Limit parallel LLM calls
+MAX_CONCURRENT_LLM_CALLS = 2
+semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLM_CALLS)
+
+
+async def structure_single_block(block: DocumentBlock) -> Dict:
     """
-    Takes all DocumentBlocks of a document and structures them into a JSON schema using an LLM.
-    Returns a list of structured JSON objects corresponding to each block.
+    Sends a single DocumentBlock to LLM and returns a structured JSON result.
+    """
+    async with semaphore:
+        try:
+            prompt = f"""
+You are given a text block from a document. Your task is to return a JSON object following exactly this schema:
+
+{{
+    "section_type": "header | subsection | paragraph | table | figure | other",
+    "title": string or null,
+    "content": string,
+    "summary": string
+}}
+
+Requirements:
+- Fill in all fields. Do not leave any field empty.
+- Choose the most appropriate 'section_type' for the text.
+- 'title' should be null if no title is apparent in the text.
+- 'content' must contain the full original text block.
+- 'summary' must be a concise summary of the content, maximum 500 characters.
+- Return ONLY valid JSON. Do not include any extra text or explanations.
+
+Text block:
+{block.content}
+"""
+
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                response_format={"type": "json_object"}
+            )
+
+            raw_content = response.choices[0].message.content.strip()
+
+            try:
+                return json.loads(raw_content)
+            except json.JSONDecodeError:
+                logger.warning(
+                    f"Invalid JSON from LLM for block_id={block.id}."
+                )
+                return {
+                    "section_type": "other",
+                    "title": None,
+                    "content": block.content,
+                    "summary": block.content[:500]
+                }
+
+        except Exception as e:
+            logger.exception(
+                f"LLM processing failed for block_id={block.id}: {e}"
+            )
+            return {
+                "section_type": "other",
+                "title": None,
+                "content": block.content,
+                "summary": block.content[:500],
+            }
+
+
+async def structure_blocks(document_id: int, parse_id: int) -> List[Dict]:
+    """
+    Structures all DocumentBlocks of a document using LLM.
+
+    - Load blocks from DB
+    - Process blocks concurrently (rate limited)
+    - Persist structured metadata
+    - Return structured results
     """
     db = SessionLocal()
     try:
-        # Load all blocks for a document and parse, sorted by block_index
-        blocks = (
+        blocks: List[DocumentBlock] = (
             db.query(DocumentBlock)
             .filter(
                 DocumentBlock.document_id == document_id,
@@ -29,52 +103,33 @@ def structure_blocks(document_id: int, parse_id: int) -> List[Dict]:
         )
 
         if not blocks:
+            logger.info(
+                f"No document blocks found for document_id:{document_id}, parse_id:{parse_id}"
+            )
             return []
 
-        structured_results: List[Dict] = []
+        # Parallel LLM processing
+        tasks = [structure_single_block(block) for block in blocks]
+        structured_results = await asyncio.gather(*tasks)
 
-        for block in blocks:
-            prompt = f"""
-            You are given a text block from a document.
-            Create a JSON following this exact schema:
-            {{
-                "section_type": "header | subsection | paragraph | table | figure | other",
-                "title": string or null,
-                "content": string,
-                "summary": string
-            }}
-            Text block:
-            {block.content}
-            """
+        final_results: List[Dict] = []
 
-            messages = [{"role": "user", "content": prompt}]
+        for block, structured in zip(blocks, structured_results):
+            block.semantic_label = structured.get("section_type")
+            block.title = structured.get("title")
+            block.summary = structured.get("summary")
 
-            # LLM-Aufruf
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=messages,
-                temperature=0
-            )
+            final_results.append(structured)
 
-            try:
-                structured_json = json.loads(response.choices[0].message.content)
-            except (json.JSONDecodeError, AttributeError):
-                # Fallback if LLM does not return valid JSON
-                structured_json = {
-                    "section_type": "other",
-                    "title": None,
-                    "content": block.content,
-                    "summary": block.content[:500]
-                }
+        db.commit()
+        return final_results
 
-            block.semantic_label = structured_json.get("section_type")
-            block.title = structured_json.get("title")
-            block.summary = structured_json.get("summary")
-            db.commit()
-
-            structured_results.append(structured_json)
-
-        return structured_results
+    except Exception as e:
+        db.rollback()
+        logger.exception(
+            f"Failed to structure blocks for document_id:{document_id}: {e}"
+        )
+        raise
 
     finally:
         db.close()
