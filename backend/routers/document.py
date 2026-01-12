@@ -1,7 +1,9 @@
-from fastapi import APIRouter, UploadFile, HTTPException, Body
+from fastapi import APIRouter, UploadFile, HTTPException, Body, BackgroundTasks
 from pathlib import Path
 from uuid import uuid4
 import logging
+import asyncio
+
 from backend.database.database import SessionLocal
 from backend.models.document import Document
 from backend.parsers.pdf_parser import parse_document
@@ -13,6 +15,82 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# -------------------- PROCESS LOGIC --------------------
+async def process_document_logic(document_id: int):
+    """
+    Document processing logic:
+    - parse
+    - chunk
+    - create blocks
+    - structuring LLM
+    """
+    db = SessionLocal()
+    document = None
+    logger.info(f"Start processing document {document_id}")
+
+    try:
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if not document:
+            logger.error(f"Document {document_id} not found")
+            return
+
+        document.file_status = "processing"
+        db.commit()
+
+        # Parsing
+        doc_parse = parse_document(document_id=document.id, file_path=document.storage_path)
+        if not doc_parse.full_text.strip():
+            document.file_status = "parsed_empty"
+            db.commit()
+            logger.info(f"Document {document_id} is empty")
+            return
+
+        # Chunking
+        chunk_text(
+            document_id=document.id,
+            parse_id=doc_parse.id,
+            text=doc_parse.full_text,
+            max_tokens=MAX_TOKENS
+        )
+        logger.info(f"Chunking completed for document ID {document.id}")
+
+        # Blocks
+        create_blocks_from_chunks(
+            document_id=document.id,
+            parse_id=doc_parse.id
+        )
+        logger.info(f"Block creation completed for document ID {document.id}")
+
+        # LLM Structuring
+        await structure_blocks(
+            document_id=document.id,
+            parse_id=doc_parse.id
+        )
+
+        document.file_status = "structured"
+        db.commit()
+        logger.info(f"Document {document_id} processed successfully")
+
+    except Exception as e:
+        db.rollback()
+        if document:
+            document.file_status = "failed"
+            db.commit()
+        logger.exception(f"Document {document_id} processing failed: {e}")
+    finally:
+        db.close()
+        logger.info(f"Finished processing document {document_id}")
+
+
+# Synchronous wrapper for BackgroundTasks
+def process_document_sync(document_id: int):
+    """
+    Runs the async document processing logic in a new event loop.
+    """
+    asyncio.run(process_document_logic(document_id))
+
+
+# -------------------- ROUTES --------------------
 @router.get("/")
 def get_documents():
     """
@@ -43,12 +121,9 @@ def get_documents():
         db.close()
 
 @router.post("/upload")
-async def upload_document(file: UploadFile):
+async def upload_document(file: UploadFile, background_tasks: BackgroundTasks):
     """
-    Upload a document.
-    - store file
-    - create DB entry
-    - return document_id
+    Upload a document and automatically start background processing.
     """
     # Create Location
     storage_dir = Path("backend/storage/documents")
@@ -76,8 +151,11 @@ async def upload_document(file: UploadFile):
         db.refresh(document)
         logger.info(f"Uploaded file '{file.filename}' as document ID {document.id}")
 
+        # Use sync wrapper in BackgroundTasks
+        background_tasks.add_task(process_document_sync, document.id)
+
         return {
-            "message": "Document uploaded succesfully",
+            "message": "Document uploaded successfully and processing started",
             "document_id": document.id,
             "status": document.file_status
         }
@@ -96,97 +174,12 @@ async def upload_document(file: UploadFile):
         db.close()
 
 @router.post("/{id}/process")
-async def process_document(id: int):
+async def process_document_route(id: int):
     """
-    Process a previously uploaded document:
-    - parse
-    - chunk
-    - create blocks
-    - structure blocks with LLM
+    Process a previously uploaded document.
     """
-    db = SessionLocal()
-
-    try:
-        document = db.query(Document).filter(Document.id == id).first()
-        if not document:
-            raise HTTPException(status_code=404, detail="Document not found")
-
-        if document.file_status == "processing":
-            raise HTTPException(
-                status_code=409,
-                detail="Document is already being processed"
-            )
-
-        if document.file_status not in {"uploaded", "failed"}:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Document cannot be processed from status '{document.file_status}'"
-            )
-
-        document.file_status = "processing"
-        db.commit()
-
-        # Parsing
-        doc_parse = parse_document(
-            document_id=document.id,
-            file_path=document.storage_path,
-        )
-
-        if not doc_parse.full_text.strip():
-            document.file_status = "parsed_empty"
-            db.commit()
-            return {
-                "message": "Document contains no text",
-                "document_id": document.id
-            }
-
-        # Chunking
-        num_chunks = chunk_text(
-            document_id=document.id,
-            parse_id=doc_parse.id,
-            text=doc_parse.full_text,
-            max_tokens=MAX_TOKENS,
-        )
-
-        # Blocks
-        num_blocks = create_blocks_from_chunks(
-            document_id=document.id,
-            parse_id=doc_parse.id,
-        )
-
-        # LLM Structuring
-        structured_blocks = await structure_blocks(
-            document_id=document.id,
-            parse_id=doc_parse.id,
-        )
-
-        document.file_status = "structured"
-        db.commit()
-
-        return {
-            "message": "Document processed successfully",
-            "document_id": document.id,
-            "chunks_created": num_chunks,
-            "blocks_created": num_blocks,
-            "structured_blocks": structured_blocks,
-        }
-
-    except Exception as e:
-        logger.exception(f"Processing failed for document {id}: {e}")
-        db.rollback()
-
-        document = db.query(Document).filter(Document.id == id).first()
-        if document:
-            document.file_status = "failed"
-            db.commit()
-
-        raise HTTPException(
-            status_code=500,
-            detail="Document processing failed",
-        )
-
-    finally:
-        db.close()
+    await process_document_logic(id)
+    return {"message": f"Processing started for document {id}"}
 
 @router.get("/{id}")
 def get_document(id: int):
