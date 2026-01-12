@@ -10,6 +10,8 @@ from backend.parsers.pdf_parser import parse_document
 from backend.services.chunking_service import chunk_text, MAX_TOKENS
 from backend.services.document_block_service import create_blocks_from_chunks
 from backend.services.structured_block_service import structure_blocks
+from backend.services.report_service import generate_report_for_document
+from backend.models.report import Report
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +72,19 @@ async def process_document_logic(document_id: int):
         document.file_status = "structured"
         db.commit()
         logger.info(f"Document {document_id} processed successfully")
+
+        try:
+            # Generate Report
+            report_data = generate_report_for_document(db, document.id)
+
+            report = Report(document_id=document.id, content=report_data)
+            db.add(report)
+            db.commit()
+            logger.info(f"Report created for document {document.id}")
+
+        except Exception as e:
+            db.rollback()
+            logger.exception(f"Failed to create report for document {document.id}: {e}")
 
     except Exception as e:
         db.rollback()
@@ -270,7 +285,6 @@ def delete_document(id: int):
         if filepath.exists():
             filepath.unlink()
 
-        # Delete Database entry
         db.delete(document)
         db.commit()
 

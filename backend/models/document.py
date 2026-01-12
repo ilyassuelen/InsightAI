@@ -12,6 +12,8 @@ class Document(Base):
     storage_path = Column(String, nullable=False)
     file_status = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
     parses = relationship("DocumentParse", back_populates="document", cascade="all, delete-orphan")
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
     blocks = relationship("DocumentBlock", back_populates="document", cascade="all, delete-orphan")
+    reports = relationship("Report", back_populates="document", cascade="all, delete-orphan")
