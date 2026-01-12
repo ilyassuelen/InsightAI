@@ -45,12 +45,10 @@ def get_documents():
 @router.post("/upload")
 async def upload_document(file: UploadFile):
     """
-    Async upload and process a document:
+    Upload a document.
     - store file
-    - parse file (sync)
-    - chunk text (sync)
-    - create blocks (sync)
-    - structure blocks with LLM (async and parallel)
+    - create DB entry
+    - return document_id
     """
     # Create Location
     storage_dir = Path("backend/storage/documents")
@@ -78,20 +76,71 @@ async def upload_document(file: UploadFile):
         db.refresh(document)
         logger.info(f"Uploaded file '{file.filename}' as document ID {document.id}")
 
-        # Parsing (sync)
-        doc_parse = parse_document(document_id=document.id, file_path=str(filepath))
-        document.file_status = "parsed"
+        return {
+            "message": "Document uploaded succesfully",
+            "document_id": document.id,
+            "status": document.file_status
+        }
+
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Upload failed: {e}")
+
+        if filepath.exists():
+            filepath.unlink()
+
+        raise HTTPException(status_code=500, detail="Document upload failed")
+
+    finally:
+        await file.close()
+        db.close()
+
+@router.post("/{id}/process")
+async def process_document(id: int):
+    """
+    Process a previously uploaded document:
+    - parse
+    - chunk
+    - create blocks
+    - structure blocks with LLM
+    """
+    db = SessionLocal()
+
+    try:
+        document = db.query(Document).filter(Document.id == id).first()
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        if document.file_status == "processing":
+            raise HTTPException(
+                status_code=409,
+                detail="Document is already being processed"
+            )
+
+        if document.file_status not in {"uploaded", "failed"}:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Document cannot be processed from status '{document.file_status}'"
+            )
+
+        document.file_status = "processing"
         db.commit()
+
+        # Parsing
+        doc_parse = parse_document(
+            document_id=document.id,
+            file_path=document.storage_path,
+        )
 
         if not doc_parse.full_text.strip():
             document.file_status = "parsed_empty"
             db.commit()
             return {
-                "message": "Document parsed but contains no text",
-                "document_id": document.id,
+                "message": "Document contains no text",
+                "document_id": document.id
             }
 
-        # Chunking (sync)
+        # Chunking
         num_chunks = chunk_text(
             document_id=document.id,
             parse_id=doc_parse.id,
@@ -99,18 +148,13 @@ async def upload_document(file: UploadFile):
             max_tokens=MAX_TOKENS,
         )
 
-        document.file_status = "chunked"
-        db.commit()
-        logger.info(f"Created {num_chunks} chunks for document ID {document.id}")
-
         # Blocks
         num_blocks = create_blocks_from_chunks(
             document_id=document.id,
             parse_id=doc_parse.id,
         )
-        logger.info(f"Created {num_blocks} blocks for document ID {document.id}")
 
-        # LLM structuring (async and parallel)
+        # LLM Structuring
         structured_blocks = await structure_blocks(
             document_id=document.id,
             parse_id=doc_parse.id,
@@ -128,19 +172,20 @@ async def upload_document(file: UploadFile):
         }
 
     except Exception as e:
+        logger.exception(f"Processing failed for document {id}: {e}")
         db.rollback()
-        logger.exception(f"Upload failed: {e}")
 
-        if filepath.exists():
-            filepath.unlink()
+        document = db.query(Document).filter(Document.id == id).first()
+        if document:
+            document.file_status = "failed"
+            db.commit()
 
         raise HTTPException(
             status_code=500,
-            detail="Document upload failed",
+            detail="Document processing failed",
         )
 
     finally:
-        await file.close()
         db.close()
 
 @router.get("/{id}")
