@@ -1,12 +1,10 @@
-# 🤖 InsightAI
+![InsightAI Logo](frontend/public/logo.png)
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-brightgreen) ![Python ≥3.10](https://img.shields.io/badge/python-%3E%3D3.10-blue) ![Node ≥18](https://img.shields.io/badge/node-%3E%3D18-green)
 
 **InsightAI** is a modern web application designed to help users extract insights from their documents efficiently. Users can upload PDFs, CSV files, or connect to API data. The integrated AI analyzes the content, generates professional reports, and answers specific questions about the data (Chat feature in progress).
 
 > **Note:** Currently, the application is fully optimized for **PDF documents**. CSV upload and API-connected data are planned features (in progress).
-
-![InsightAI Preview](static/images/insightai_.png)
 
 ---
 
