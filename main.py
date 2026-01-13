@@ -1,9 +1,24 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from backend.routers import user, document, report, chat, session, ai
 import backend.database.init_db
 
 app = FastAPI(title="InsightAI")
 
+# --- CORS Middleware ---
+origins = [
+    "http://localhost:8080",  # Dein Frontend
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,      # erlaubt Anfragen von hier
+    allow_credentials=True,
+    allow_methods=["*"],        # erlaubt GET, POST, PUT, DELETE ...
+    allow_headers=["*"],        # erlaubt alle Header
+)
+
+# --- Router ---
 app.include_router(user.router, prefix="/users")
 app.include_router(document.router, prefix="/documents")
 app.include_router(report.router, prefix="/reports")

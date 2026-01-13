@@ -69,7 +69,7 @@ async def process_document_logic(document_id: int):
             parse_id=doc_parse.id
         )
 
-        document.file_status = "structured"
+        document.file_status = "completed"
         db.commit()
         logger.info(f"Document {document_id} processed successfully")
 

@@ -16,13 +16,12 @@ def get_reports():
     try:
         reports = db.query(Report).all()
         return JSONResponse(
-            content = [{
+            content=[{
                 "id": report.id,
                 "document_id": report.document_id,
-                "content": report.content
-            }
-            for report in reports
-            ],
+                "content": report.content,
+                "generated_at": report.created_at.isoformat()
+            } for report in reports],
             media_type="application/json"
         )
     finally:
@@ -31,14 +30,13 @@ def get_reports():
 @router.post("/{document_id}")
 def create_report(document_id: int):
     """
-    Generating a structured report for a given document.
+    Generate a structured report for a given document.
     """
     db: Session = SessionLocal()
     try:
-        # Generate Report
+        # Generate report content
         report_data = generate_report_for_document(db, document_id)
 
-        # Save to DB
         report = Report(
             document_id=document_id,
             content=report_data
@@ -47,6 +45,8 @@ def create_report(document_id: int):
         db.add(report)
         db.commit()
         db.refresh(report)
+
+        report_data['generated_at'] = report.created_at.isoformat()
 
         return JSONResponse(
             content=report_data,
@@ -70,14 +70,12 @@ def get_report(id: int):
         report = db.query(Report).filter(Report.id == id).first()
         if not report:
             raise HTTPException(status_code=404, detail="Report not found")
-        return JSONResponse(
-            content={
-                    "id": report.id,
-                    "document_id": report.document_id,
-                    "content": report.content
-            },
-            media_type="application/json"
-        )
+
+        report_data = report.content or {}
+        report_data['generated_at'] = report.created_at.isoformat()
+
+        return report_data
+
     finally:
         db.close()
 
