@@ -2,7 +2,6 @@ from fastapi import APIRouter, UploadFile, HTTPException, Body, BackgroundTasks
 from pathlib import Path
 from uuid import uuid4
 import logging
-import asyncio
 
 from backend.database.database import SessionLocal
 from backend.models.document import Document
@@ -96,20 +95,9 @@ async def process_document_logic(document_id: int):
         logger.info(f"Finished processing document {document_id}")
 
 
-# Synchronous wrapper for BackgroundTasks
-def process_document_sync(document_id: int):
-    """
-    Runs the async document processing logic in a new event loop.
-    """
-    asyncio.run(process_document_logic(document_id))
-
-
 # -------------------- ROUTES --------------------
 @router.get("/")
 def get_documents():
-    """
-    Retrieve a list of all documents in the database.
-    """
     db = SessionLocal()
     try:
         documents = db.query(Document).all()
@@ -134,21 +122,16 @@ def get_documents():
     finally:
         db.close()
 
+
 @router.post("/upload")
 async def upload_document(file: UploadFile, background_tasks: BackgroundTasks):
-    """
-    Upload a document and automatically start background processing.
-    """
-    # Create Location
     storage_dir = Path("backend/storage/documents")
     storage_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create unique file name
     unique_filename = f"{uuid4()}_{file.filename}"
     filepath = storage_dir / unique_filename
 
     db = SessionLocal()
-
     try:
         with open(filepath, "wb") as f:
             f.write(await file.read())
@@ -165,8 +148,7 @@ async def upload_document(file: UploadFile, background_tasks: BackgroundTasks):
         db.refresh(document)
         logger.info(f"Uploaded file '{file.filename}' as document ID {document.id}")
 
-        # Use sync wrapper in BackgroundTasks
-        background_tasks.add_task(process_document_sync, document.id)
+        background_tasks.add_task(process_document_logic, document.id)
 
         return {
             "message": "Document uploaded successfully and processing started",
@@ -177,29 +159,22 @@ async def upload_document(file: UploadFile, background_tasks: BackgroundTasks):
     except Exception as e:
         db.rollback()
         logger.exception(f"Upload failed: {e}")
-
         if filepath.exists():
             filepath.unlink()
-
         raise HTTPException(status_code=500, detail="Document upload failed")
-
     finally:
         await file.close()
         db.close()
 
+
 @router.post("/{id}/process")
 async def process_document_route(id: int):
-    """
-    Process a previously uploaded document.
-    """
     await process_document_logic(id)
     return {"message": f"Processing started for document {id}"}
 
+
 @router.get("/{id}")
 def get_document(id: int):
-    """
-    Retrieve a document by its ID.
-    """
     db = SessionLocal()
     try:
         document = db.query(Document).filter(Document.id == id).first()
@@ -217,15 +192,12 @@ def get_document(id: int):
             "file_status": document.file_status,
             "created_at": document.created_at
         }
-
     finally:
         db.close()
 
+
 @router.patch("/{id}")
 def update_document(id: int, filename: str | None = Body(default=None), file_status: str | None = Body(default=None)):
-    """
-    Update document metadata (filename or file_status) for a given ID.
-    """
     db = SessionLocal()
     try:
         document = db.query(Document).filter(Document.id == id).first()
@@ -254,7 +226,6 @@ def update_document(id: int, filename: str | None = Body(default=None), file_sta
                 "created_at": document.created_at
             }
         }
-
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -265,11 +236,9 @@ def update_document(id: int, filename: str | None = Body(default=None), file_sta
     finally:
         db.close()
 
+
 @router.delete("/{id}")
 def delete_document(id: int):
-    """
-    Delete a document by its ID.
-    """
     db = SessionLocal()
     try:
         document = db.query(Document).filter(Document.id == id).first()
@@ -279,7 +248,6 @@ def delete_document(id: int):
                 detail="Document not found"
             )
 
-        # Delete file on file system, if it exists.
         filepath = Path(document.storage_path)
         if filepath.exists():
             filepath.unlink()
