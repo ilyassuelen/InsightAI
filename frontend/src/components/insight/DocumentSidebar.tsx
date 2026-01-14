@@ -13,9 +13,9 @@ interface DocumentSidebarProps {
 const statusConfig: Record<DocumentStatus, { icon: React.ElementType; className: string; label: string }> = {
   uploaded: { icon: Loader2, className: 'text-muted-foreground animate-spin', label: 'Uploaded' },
   processing: { icon: Clock, className: 'text-processing animate-pulse-glow', label: 'Processing' },
+  reporting: {icon: Loader2, className: 'text-purple-500 animate-spin', label: 'Generating Report' },
   completed: { icon: CheckCircle, className: 'text-success', label: 'Completed' },
-  failed: { icon: AlertCircle, className: 'text-error', label: 'Error' },
-  structured: { icon: CheckCircle, className: 'text-success', label: 'Structured' },
+  report_failed: { icon: AlertCircle, className: 'text-error', label: 'Report Failed' },
   parsed_empty: { icon: AlertCircle, className: 'text-muted-foreground', label: 'Empty' },
 };
 
@@ -68,7 +68,12 @@ export function DocumentSidebar({ documents, selectedDocument, onSelectDocument,
           </div>
         ) : (
           documents.map((doc, index) => {
-            const status = statusConfig[doc.file_status];
+            const status = statusConfig[doc.file_status] ?? {
+                icon: AlertCircle,
+                className: 'text-muted-foreground',
+                label: 'Unknown',
+                };
+
             const StatusIcon = status.icon;
             const isSelected = selectedDocument?.id === doc.id;
 

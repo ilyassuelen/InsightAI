@@ -69,27 +69,26 @@ async def process_document_logic(document_id: int):
             parse_id=doc_parse.id
         )
 
+        document.file_status = "reporting"
+        db.commit()
+        logger.info(f"Generating report for document {document.id}")
+
+        # Generate Report
+        report_data = generate_report_for_document(db, document.id)
+
+        report = Report(document_id=document.id, content=report_data)
+        db.add(report)
+        db.commit()
+        db.refresh(report)
+        logger.info(f"Report created for document {document.id}")
+
         document.file_status = "completed"
         db.commit()
-        logger.info(f"Document {document_id} processed successfully")
-
-        try:
-            # Generate Report
-            report_data = generate_report_for_document(db, document.id)
-
-            report = Report(document_id=document.id, content=report_data)
-            db.add(report)
-            db.commit()
-            logger.info(f"Report created for document {document.id}")
-
-        except Exception as e:
-            db.rollback()
-            logger.exception(f"Failed to create report for document {document.id}: {e}")
 
     except Exception as e:
         db.rollback()
         if document:
-            document.file_status = "failed"
+            document.file_status = "report_failed"
             db.commit()
         logger.exception(f"Document {document_id} processing failed: {e}")
     finally:
