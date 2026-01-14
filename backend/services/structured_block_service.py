@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from backend.database.database import SessionLocal
@@ -81,30 +81,32 @@ Text block:
             }
 
 
-async def structure_blocks(document_id: int, parse_id: int) -> List[Dict]:
+async def structure_blocks(document_id: int, parse_id: Optional[int]) -> List[Dict]:
     """
     Structures all DocumentBlocks of a document using LLM.
 
-    - Load blocks from DB
-    - Process blocks concurrently (rate limited)
-    - Persist structured metadata
-    - Return structured results
+    Works for:
+    - PDFs
+    - CSVs
     """
     db = SessionLocal()
     try:
-        blocks: List[DocumentBlock] = (
-            db.query(DocumentBlock)
-            .filter(
-                DocumentBlock.document_id == document_id,
-                DocumentBlock.parse_id == parse_id
-            )
-            .order_by(DocumentBlock.block_index)
-            .all()
+        query = db.query(DocumentBlock).filter(
+            DocumentBlock.document_id == document_id
         )
+
+        if parse_id is None:
+            query = query.filter(DocumentBlock.parse_id.is_(None))
+        else:
+            query = query.filter(DocumentBlock.parse_id == parse_id)
+
+        blocks: List[DocumentBlock] = (
+            query.order_by(DocumentBlock.block_index).all()
+            )
 
         if not blocks:
             logger.info(
-                f"No document blocks found for document_id:{document_id}, parse_id:{parse_id}"
+                f"No blocks found for document_id:{document_id}, parse_id:{parse_id}"
             )
             return []
 
@@ -112,23 +114,17 @@ async def structure_blocks(document_id: int, parse_id: int) -> List[Dict]:
         tasks = [structure_single_block(block) for block in blocks]
         structured_results = await asyncio.gather(*tasks)
 
-        final_results: List[Dict] = []
-
         for block, structured in zip(blocks, structured_results):
             block.semantic_label = structured.get("section_type")
             block.title = structured.get("title")
             block.summary = structured.get("summary")
 
-            final_results.append(structured)
-
         db.commit()
-        return final_results
+        return structured_results
 
     except Exception as e:
         db.rollback()
-        logger.exception(
-            f"Failed to structure blocks for document_id:{document_id}: {e}"
-        )
+        logger.exception(f"Failed structuring document_id:{document_id}: {e}")
         raise
 
     finally:

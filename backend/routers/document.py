@@ -11,6 +11,8 @@ from backend.services.document_block_service import create_blocks_from_chunks
 from backend.services.structured_block_service import structure_blocks
 from backend.services.report_service import generate_report_for_document
 from backend.models.report import Report
+from backend.parsers.csv_parser import parse_csv
+from backend.services.csv_block_service import create_blocks_from_csv_rows
 
 logger = logging.getLogger(__name__)
 
@@ -38,34 +40,57 @@ async def process_document_logic(document_id: int):
         document.file_status = "processing"
         db.commit()
 
-        # Parsing
-        doc_parse = parse_document(document_id=document.id, file_path=document.storage_path)
-        if not doc_parse.full_text.strip():
-            document.file_status = "parsed_empty"
-            db.commit()
-            logger.info(f"Document {document_id} is empty")
-            return
+        # Parsing and block creation
+        parse_id = None
 
-        # Chunking
-        chunk_text(
-            document_id=document.id,
-            parse_id=doc_parse.id,
-            text=doc_parse.full_text,
-            max_tokens=MAX_TOKENS
-        )
-        logger.info(f"Chunking completed for document ID {document.id}")
+        if document.file_type in ("text/csv", "application/csv"):
+            rows = parse_csv(document.storage_path)
 
-        # Blocks
-        create_blocks_from_chunks(
-            document_id=document.id,
-            parse_id=doc_parse.id
-        )
-        logger.info(f"Block creation completed for document ID {document.id}")
+            if not rows:
+                document.file_status = "parsed_empty"
+                db.commit()
+                return
+
+            create_blocks_from_csv_rows(
+                db=db,
+                document_id=document.id,
+                rows=rows,
+            )
+
+        else:
+            doc_parse = parse_document(
+                document_id=document.id,
+                file_path=document.storage_path
+            )
+
+            if not doc_parse.full_text.strip():
+                document.file_status = "parsed_empty"
+                db.commit()
+                logger.info(f"Document {document_id} is empty")
+                return
+
+            parse_id = doc_parse.id
+
+            # Chunking
+            chunk_text(
+                document_id=document.id,
+                parse_id=doc_parse.id,
+                text=doc_parse.full_text,
+                max_tokens=MAX_TOKENS
+            )
+            logger.info(f"Chunking completed for document ID {document.id}")
+
+            # Blocks
+            create_blocks_from_chunks(
+                document_id=document.id,
+                parse_id=doc_parse.id
+            )
+            logger.info(f"Block creation completed for document ID {document.id}")
 
         # LLM Structuring
         await structure_blocks(
             document_id=document.id,
-            parse_id=doc_parse.id
+            parse_id=parse_id
         )
 
         document.file_status = "reporting"
