@@ -15,6 +15,7 @@ const Index = () => {
 
   const {
     documents,
+    setDocuments,
     selectedDocument,
     report,
     isLoading,
@@ -40,6 +41,7 @@ const Index = () => {
             >
               <DocumentSidebar
                 documents={documents}
+                setDocuments={setDocuments}
                 selectedDocument={selectedDocument}
                 onSelectDocument={selectDocument}
               />
@@ -69,6 +71,7 @@ const Index = () => {
               >
                 <DocumentSidebar
                   documents={documents}
+                  setDocuments={setDocuments}
                   selectedDocument={selectedDocument}
                   onSelectDocument={(doc) => {
                     selectDocument(doc);
@@ -151,4 +154,3 @@ const Index = () => {
 };
 
 export default Index;
-

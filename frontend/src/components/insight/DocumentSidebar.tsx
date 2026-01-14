@@ -29,21 +29,26 @@ export function DocumentSidebar({ documents, selectedDocument, onSelectDocument,
         method: "DELETE",
       });
 
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Failed to delete document: ${text}`);
+      let data;
+      try {
+          data = await response.json(); // Parse JSON, falls vorhanden
+      } catch {
+          data = null;
       }
 
-      // Sidebar sofort aktualisieren
+      if (!response.ok) {
+        throw new Error(data?.detail || `Failed to delete document (status ${response.status})`);
+      }
+
+      // Update sidebar immediately
       setDocuments(documents.filter(d => d.id !== id));
 
-      // Falls aktuell ausgewähltes Dokument gelöscht wurde, zurücksetzen
       if (selectedDocument?.id === id) {
         onSelectDocument(null);
       }
     } catch (err) {
       console.error(err);
-      alert("Failed to delete document");
+      alert(`Failed to delete document: ${err.message}`);
     }
   };
 

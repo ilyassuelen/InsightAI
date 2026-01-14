@@ -171,6 +171,7 @@ export function useDocuments() {
 
   return {
     documents,
+    setDocuments,
     selectedDocument,
     report,
     isLoading,
