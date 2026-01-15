@@ -7,7 +7,7 @@ interface DocumentSidebarProps {
   documents: Document[];
   selectedDocument: Document | null;
   onSelectDocument: (doc: Document | null) => void;
-  setDocuments: (docs: Document[]) => void; // State im Parent updaten
+  setDocuments: (docs: Document[]) => void;
 }
 
 const statusConfig: Record<DocumentStatus, { icon: React.ElementType; className: string; label: string }> = {
@@ -31,7 +31,7 @@ export function DocumentSidebar({ documents, selectedDocument, onSelectDocument,
 
       let data;
       try {
-          data = await response.json(); // Parse JSON, falls vorhanden
+          data = await response.json();
       } catch {
           data = null;
       }
@@ -102,8 +102,8 @@ export function DocumentSidebar({ documents, selectedDocument, onSelectDocument,
                   <div className="flex-1 min-w-0">
                     <p
                       className="text-sm font-medium text-sidebar-foreground truncate"
-                      title={doc.filename} // Tooltip zeigt vollen Dateinamen
-                      style={{ maxWidth: '20ch' }} // maximal 20 Zeichen anzeigen
+                      title={doc.filename}
+                      style={{ maxWidth: '20ch' }}
                     >
                       {doc.filename}
                     </p>

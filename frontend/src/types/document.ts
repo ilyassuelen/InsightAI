@@ -1,6 +1,7 @@
 export type DocumentStatus =
   | 'uploaded'
   | 'processing'
+  | 'reporting'
   | 'completed'
   | 'structured'
   | 'parsed_empty'

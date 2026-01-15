@@ -135,19 +135,18 @@ async def process_document_logic(document_id: int):
             )
             logger.info(f"Block creation completed for document ID {document.id}")
 
+        document.file_status = "reporting"
+        db.commit()
+        logger.info(f"Document {document.id} is now in reporting status")
+
         # LLM Structuring
         await structure_blocks(
             document_id=document.id,
             parse_id=parse_id
         )
 
-        document.file_status = "reporting"
-        db.commit()
-        logger.info(f"Generating report for document {document.id}")
-
         # Generate Report
         report_data = generate_report_for_document(db, document.id)
-
         report = Report(document_id=document.id, content=report_data)
         db.add(report)
         db.commit()
