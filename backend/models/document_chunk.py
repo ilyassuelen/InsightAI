@@ -7,7 +7,7 @@ class DocumentChunk(Base):
 
     id = Column(Integer, primary_key=True)
     document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
-    parse_id = Column(Integer, ForeignKey("document_parses.id", ondelete="CASCADE"), nullable=False)
+    parse_id = Column(Integer, ForeignKey("document_parses.id", ondelete="CASCADE"), nullable=True)
     chunk_index = Column(Integer, nullable=False)
     token_count = Column(Integer, nullable=False)
     text = Column(Text, nullable=False)
