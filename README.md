@@ -2,15 +2,15 @@
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-brightgreen) ![Python ≥3.10](https://img.shields.io/badge/python-%3E%3D3.10-blue) ![Node ≥18](https://img.shields.io/badge/node-%3E%3D18-green)
 
-**InsightAI** is a modern web application designed to help users extract insights from their documents efficiently. Users can upload PDFs, CSV files, or connect to API data. The integrated AI analyzes the content, generates professional reports, and answers specific questions about the data (Chat feature in progress).
+**InsightAI** is a modern web application designed to help users extract insights from their documents efficiently. Users can upload PDFs, CSVs, DOCX, TXT-files or connect to API data. The integrated AI analyzes the content, generates professional reports, and answers specific questions about the data (Chat feature in progress).
 
-> **Note:** Currently, the application is fully optimized for **PDF documents**. CSV upload and API-connected data are planned features (in progress).
+> **Note:** Currently, the application is fully optimized for **PDF, CSV, DOCX and TXT documents**. API-connected data is a planned feature (in progress).
 
 ---
 
 ## ⚡ Features
 
-- **Document Upload:** Currently optimized for PDFs. CSV and API-connected data support is in progress.  
+- **Document Upload:** Currently optimized for PDFs, CSVs, DOCXs and TXTs. 
 - **AI-Powered Analysis:** Automatically generates structured reports and summaries.  
 - **Interactive Interface:** View reports, explore sections, and access key metrics.  
 - **Quick Insights:** Ask specific questions about your documents (Chat feature in progress).  
@@ -64,12 +64,12 @@ The app uses environment variables for configuration. Create a `.env` file in th
 ## Usage
 
 1. Open the frontend in your browser at [http://localhost:8080](http://localhost:8080).  
-2. Upload a PDF document via the Upload Zone.  
+2. Upload a Document via the Upload Zone.  
 3. Wait for AI processing (status shown in sidebar).  
 4. Click on the document to view the generated report.  
 5. Use the chat panel to ask specific questions about the document content (feature in progress).  
 
-CSV and API-connected documents are not fully supported yet and may not generate complete reports.
+(API-connected documents are not supported yet)
 
 ## Tech Stack
 - Frontend: React, TypeScript, Tailwind CSS, Framer Motion
@@ -79,7 +79,7 @@ CSV and API-connected documents are not fully supported yet and may not generate
 - State Management: React Hooks & Context
 
 ## Roadmap (Planned Features)
-- Full CSV support for document upload and analysis
+- Enhanced CSV support for very large files
 - API-connected data ingestion
 - Chat feature for asking questions about documents
 - Enhanced reporting options and visualizations
