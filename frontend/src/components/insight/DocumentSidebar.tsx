@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { FileText, Clock, CheckCircle, AlertCircle, Loader2, Delete } from 'lucide-react';
+import { FileText, Clock, CheckCircle, AlertCircle, Loader2, Delete, Pencil } from 'lucide-react';
 import { Document, DocumentStatus } from '@/types/document';
 import { cn } from '@/lib/utils';
 
@@ -20,6 +20,44 @@ const statusConfig: Record<DocumentStatus, { icon: React.ElementType; className:
 };
 
 export function DocumentSidebar({ documents, selectedDocument, onSelectDocument, setDocuments }: DocumentSidebarProps) {
+
+  const handleRename = async (doc: Document) => {
+  const newName = prompt('Enter new filename:', doc.filename);
+  if (!newName || newName.trim() === '' || newName === doc.filename) return;
+
+  try {
+    const response = await fetch(
+      `http://localhost:8000/documents/${doc.id}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ filename: newName }),
+      }
+    );
+
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      data = null;
+    }
+
+    if (!response.ok) {
+      throw new Error(data?.detail || 'Failed to rename document');
+    }
+
+    setDocuments(
+      documents.map(d =>
+        d.id === doc.id ? { ...d, filename: newName } : d
+      )
+    );
+  } catch (err: any) {
+    console.error(err);
+    alert(`Failed to rename document: ${err.message}`);
+  }
+};
 
   const handleDelete = async (id: number) => {
     if (!confirm("Are you sure you want to delete this document?")) return;
@@ -114,13 +152,31 @@ export function DocumentSidebar({ documents, selectedDocument, onSelectDocument,
                   </div>
                 </button>
 
-                {/* Delete Button */}
-                <button
-                  onClick={() => handleDelete(doc.id)}
-                  className="p-1 rounded hover:bg-red-100"
-                >
-                  <Delete className="w-4 h-4 text-red-500" />
-                </button>
+                <div className="flex items-center gap-1">
+                    {/* Rename Button */}
+                    <button
+                        onClick={(e) => {
+                        e.stopPropagation();
+                        handleRename(doc);
+                        }}
+                        className="p-1 rounded hover:bg-muted"
+                        title="Rename document"
+                    >
+                        <Pencil className="w-4 h-4 text-muted-foreground" />
+                    </button>
+
+                    {/* Delete Button */}
+                    <button
+                        onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(doc.id);
+                        }}
+                        className="p-1 rounded hover:bg-red-100"
+                        title="Delete document"
+                    >
+                        <Delete className="w-4 h-4 text-red-500" />
+                    </button>
+                    </div>
               </motion.div>
             );
           })
