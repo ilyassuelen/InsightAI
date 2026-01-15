@@ -9,6 +9,7 @@ from backend.models.report import Report
 from backend.parsers.pdf_parser import parse_document
 from backend.parsers.csv_parser import parse_csv
 from backend.parsers.txt_parser import parse_txt
+from backend.parsers.docx_parser import parse_docx
 from backend.services.chunking_service import chunk_text, MAX_TOKENS
 from backend.services.document_block_service import create_blocks_from_chunks
 from backend.services.structured_block_service import structure_blocks
@@ -60,6 +61,30 @@ async def process_document_logic(document_id: int):
 
         elif document.file_type in ("text/plain", "text/markdown"):
             full_text = parse_txt(document.storage_path)
+
+            if not full_text.strip():
+                document.file_status = "parsed_empty"
+                db.commit()
+                return
+
+            # Chunking
+            chunk_text(
+                document_id=document.id,
+                parse_id=None,
+                text=full_text,
+                max_tokens=MAX_TOKENS
+            )
+
+            # Blocks
+            create_blocks_from_chunks(
+                document_id=document.id,
+                parse_id=None
+            )
+
+        elif document.file_type in (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ):
+            full_text = parse_docx(document.storage_path)
 
             if not full_text.strip():
                 document.file_status = "parsed_empty"

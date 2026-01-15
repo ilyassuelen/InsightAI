@@ -7,3 +7,4 @@ pydantic
 python-multipart
 docling
 tiktoken
+python-docx
