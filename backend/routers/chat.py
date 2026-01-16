@@ -1,6 +1,16 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from backend.services.chat_service import generate_chat_response
+import asyncio
 
 router = APIRouter()
+
+class ChatRequest(BaseModel):
+    document_id: int
+    message: str
+
+class ChatResponse(BaseModel):
+    answer: str
 
 @router.get("/")
 def get_chats():
@@ -9,12 +19,19 @@ def get_chats():
     """
     return {"message": "List all chats"}
 
-@router.post("/")
-def create_chat():
+@router.post("/", response_model=ChatResponse)
+async def create_chat(request: ChatRequest):
     """
-    Send a new chat message.
+    Send a new chat message and get a response.
     """
-    return {"message": "Create a new chat message"}
+    if not request.message.strip():
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    try:
+        answer = await generate_chat_response(request.document_id, request.message)
+        return ChatResponse(answer=answer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate chat response: {e}")
 
 @router.get("/{id}")
 def get_chat(id: int):

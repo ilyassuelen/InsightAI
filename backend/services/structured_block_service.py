@@ -129,3 +129,22 @@ async def structure_blocks(document_id: int, parse_id: Optional[int]) -> List[Di
 
     finally:
         db.close()
+
+
+def get_structured_blocks(document_id: int) -> List[str]:
+    """
+    Returns a list of content strings for all blocks of a document.
+    """
+    db = SessionLocal()
+    try:
+        blocks = (
+            db.query(DocumentBlock)
+            .filter(DocumentBlock.document_id == document_id)
+            .order_by(DocumentBlock.block_index)
+            .all()
+        )
+
+        return [block.content for block in blocks]
+
+    finally:
+        db.close()
