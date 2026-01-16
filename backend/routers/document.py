@@ -10,7 +10,7 @@ from backend.parsers.pdf_parser import parse_document
 from backend.parsers.csv_parser import parse_csv
 from backend.parsers.txt_parser import parse_txt
 from backend.parsers.docx_parser import parse_docx
-from backend.services.chunking_service import chunk_text, MAX_TOKENS
+from backend.services.chunking_service import chunk_text_from_text, MAX_TOKENS
 from backend.services.document_block_service import create_blocks_from_chunks
 from backend.services.structured_block_service import structure_blocks
 from backend.services.report_service import generate_report_for_document
@@ -68,7 +68,7 @@ async def process_document_logic(document_id: int):
                 return
 
             # Chunking
-            chunk_text(
+            chunk_text_from_text(
                 document_id=document.id,
                 parse_id=None,
                 text=full_text,
@@ -92,7 +92,7 @@ async def process_document_logic(document_id: int):
                 return
 
             # Chunking
-            chunk_text(
+            chunk_text_from_text(
                 document_id=document.id,
                 parse_id=None,
                 text=full_text,
@@ -120,7 +120,7 @@ async def process_document_logic(document_id: int):
             parse_id = doc_parse.id
 
             # Chunking
-            chunk_text(
+            chunk_text_from_text(
                 document_id=document.id,
                 parse_id=doc_parse.id,
                 text=doc_parse.full_text,
