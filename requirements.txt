@@ -8,3 +8,4 @@ python-multipart
 docling
 tiktoken
 python-docx
+chromadb

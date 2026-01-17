@@ -6,19 +6,47 @@ import logging
 from backend.database.database import SessionLocal
 from backend.models.document import Document
 from backend.models.report import Report
-from backend.parsers.pdf_parser import parse_document
 from backend.parsers.csv_parser import parse_csv
 from backend.parsers.txt_parser import parse_txt
 from backend.parsers.docx_parser import parse_docx
-from backend.services.chunking_service import chunk_text_from_text, MAX_TOKENS
+from backend.services.chunking_service import chunk_text_from_text, chunk_csv_rows, chunk_pdf, MAX_TOKENS
 from backend.services.document_block_service import create_blocks_from_chunks
 from backend.services.structured_block_service import structure_blocks
 from backend.services.report_service import generate_report_for_document
 from backend.services.csv_block_service import create_blocks_from_csv_rows
+from backend.models.document_chunk import DocumentChunk
+from backend.services.vector_store import upsert_document_chunks, delete_document_chunks
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# -------------------- HELPER FUNCTION --------------------
+def upsert_chunks_to_vectorstore(db, document_id: int):
+    chunks = (
+        db.query(DocumentChunk)
+        .filter(DocumentChunk.document_id == document_id)
+        .order_by(DocumentChunk.chunk_index)
+        .all()
+    )
+
+    payload = []
+    for chunk in chunks:
+        payload.append({
+            "id": chunk.id,
+            "text": chunk.text,
+            "metadata": {
+                "chunk_index": chunk.chunk_index,
+                "page_start": getattr(chunk, "page_start", None),
+                "page_end": getattr(chunk, "page_end", None),
+                "section_title": getattr(chunk, "section_title", None),
+            },
+            "keywords": (chunk.keywords or []) if hasattr(chunk, "keywords") else []
+        })
+    if payload:
+        upsert_document_chunks(document_id=document_id, chunks=payload)
+
 
 # -------------------- PROCESS LOGIC --------------------
 async def process_document_logic(document_id: int):
@@ -39,6 +67,12 @@ async def process_document_logic(document_id: int):
             logger.error(f"Document {document_id} not found")
             return
 
+        db.query(DocumentChunk) \
+            .filter(DocumentChunk.document_id == document.id) \
+            .delete()
+        db.commit()
+        delete_document_chunks(document.id)
+
         document.file_status = "processing"
         db.commit()
 
@@ -53,6 +87,10 @@ async def process_document_logic(document_id: int):
                 db.commit()
                 return
 
+            chunk_csv_rows(document_id=document.id, rows=rows)
+            upsert_chunks_to_vectorstore(db, document.id)
+
+            # Blocks
             create_blocks_from_csv_rows(
                 db=db,
                 document_id=document.id,
@@ -65,6 +103,7 @@ async def process_document_logic(document_id: int):
             if not full_text.strip():
                 document.file_status = "parsed_empty"
                 db.commit()
+                logger.info(f"Document {document_id} is empty")
                 return
 
             # Chunking
@@ -74,12 +113,17 @@ async def process_document_logic(document_id: int):
                 text=full_text,
                 max_tokens=MAX_TOKENS
             )
+            logger.info(f"Chunking completed for document ID {document.id}")
+
+            # Upsert chunks to Chroma
+            upsert_chunks_to_vectorstore(db, document.id)
 
             # Blocks
             create_blocks_from_chunks(
                 document_id=document.id,
                 parse_id=None
             )
+            logger.info(f"Block creation completed for document ID {document.id}")
 
         elif document.file_type in (
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -89,6 +133,7 @@ async def process_document_logic(document_id: int):
             if not full_text.strip():
                 document.file_status = "parsed_empty"
                 db.commit()
+                logger.info(f"Document {document_id} is empty")
                 return
 
             # Chunking
@@ -98,40 +143,32 @@ async def process_document_logic(document_id: int):
                 text=full_text,
                 max_tokens=MAX_TOKENS
             )
+            logger.info(f"Chunking completed for document ID {document.id}")
+
+            # Upsert chunks to Chroma
+            upsert_chunks_to_vectorstore(db, document.id)
 
             # Blocks
             create_blocks_from_chunks(
                 document_id=document.id,
                 parse_id=None
             )
+            logger.info(f"Block creation completed for document ID {document.id}")
 
         else:
-            doc_parse = parse_document(
+            # Chunk PDF with Docling + HybridChunker
+            parse_id, total_chunks = chunk_pdf(
                 document_id=document.id,
-                file_path=document.storage_path
+                pdf_path=document.storage_path,
             )
 
-            if not doc_parse.full_text.strip():
-                document.file_status = "parsed_empty"
-                db.commit()
-                logger.info(f"Document {document_id} is empty")
-                return
+            # Upsert chunks to Chroma
+            upsert_chunks_to_vectorstore(db, document.id)
+            logger.info(f"Chunking completed for document ID {document.id} ({total_chunks} chunks)")
 
-            parse_id = doc_parse.id
-
-            # Chunking
-            chunk_text_from_text(
-                document_id=document.id,
-                parse_id=doc_parse.id,
-                text=doc_parse.full_text,
-                max_tokens=MAX_TOKENS
-            )
-            logger.info(f"Chunking completed for document ID {document.id}")
-
-            # Blocks
             create_blocks_from_chunks(
                 document_id=document.id,
-                parse_id=doc_parse.id
+                parse_id=parse_id
             )
             logger.info(f"Block creation completed for document ID {document.id}")
 
@@ -326,6 +363,9 @@ def delete_document(id: int):
 
         db.delete(document)
         db.commit()
+
+        # Delete from Chroma as well
+        delete_document_chunks(id)
 
         return {"message": f"Document with ID: {id} deleted successfully"}
 

@@ -7,19 +7,15 @@ from fastapi import HTTPException
 def parse_document(document_id: int, file_path: str):
     """
     Parse a document using Docling and store the result in the database.
-    Saves the full text as Markdown to preserve structure.
+    Returns BOTH the DB parse entry and the DoclingDocument.
     """
     db = SessionLocal()
     try:
-        # Check if file exists
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"File {file_path} does not exist")
 
-        # Initialize Docling DocumentConverter
         converter = DocumentConverter()
-
-        # Convert document to DoclingDocument
         docling_doc = converter.convert(file_path).document
 
         # Extract full text (Markdown for structure)
@@ -42,7 +38,7 @@ def parse_document(document_id: int, file_path: str):
         db.commit()
         db.refresh(doc_parse)
 
-        return doc_parse
+        return doc_parse, docling_doc
 
     except FileNotFoundError as e:
         db.rollback()

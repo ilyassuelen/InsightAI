@@ -3,9 +3,8 @@ from backend.models.document_chunk import DocumentChunk
 from backend.parsers.pdf_parser import parse_document
 
 import tiktoken
-from typing import Optional
+from typing import Optional, List, Dict
 from docling.chunking import HybridChunker
-from docling.document_converter import DocumentConverter
 from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
 
 ENCODING = tiktoken.encoding_for_model("gpt-4o-mini")
@@ -14,13 +13,14 @@ OVERLAP = 300
 
 def chunk_text_from_text(
         document_id: int,
-        parse_id: int,
+        parse_id: Optional[int],
         text: str,
         max_tokens: int = MAX_TOKENS,
         section_title: Optional[str] = None,
         page_start: Optional[int] = None,
         page_end: Optional[int] = None,
-) -> int:
+        start_index: int = 0
+) -> tuple[int, int]:
     """
     Splits a plain text into token chunks and stores them in DocumentChunk.
     Keeps section metadata if provided.
@@ -29,7 +29,7 @@ def chunk_text_from_text(
 
     try:
         if not text or not text.strip():
-            return 0
+            return 0, start_index
 
         tokens = ENCODING.encode(text)
         chunks = [
@@ -37,12 +37,12 @@ def chunk_text_from_text(
             for i in range(0, len(tokens), max_tokens)
         ]
 
-        for index, token_chunk in enumerate(chunks):
+        for i, token_chunk in enumerate(chunks):
             chunk_text_str = ENCODING.decode(token_chunk)
             db_chunk = DocumentChunk(
                 document_id=document_id,
                 parse_id=parse_id,
-                chunk_index=index,
+                chunk_index=start_index + i,
                 token_count=len(token_chunk),
                 text=chunk_text_str,
                 section_title=section_title,
@@ -55,30 +55,26 @@ def chunk_text_from_text(
             db.add(db_chunk)
 
         db.commit()
-        return len(chunks)
+        next_index = start_index + len(chunks)
+        return len(chunks), next_index
 
     finally:
         db.close()
 
 
-def chunk_pdf(document_id: int, pdf_path: str, max_tokens: int = MAX_TOKENS, overlap: int = OVERLAP) -> int:
+def chunk_pdf(document_id: int, pdf_path: str, max_tokens: int = MAX_TOKENS, overlap: int = OVERLAP) -> tuple[int, int]:
     """
-    Parses a PDF using Docling and HybridChunker, then splits it into token chunks with overlap.
-    Stores chunks in DB with section metadata.
+    Parses a PDF using Docling and chunks it using HybridChunker.
     """
-    # Parse PDF with Docling and store parse info in DB
-    doc_parse = parse_document(document_id, pdf_path)
+    doc_parse, docling_doc = parse_document(document_id, pdf_path)
     parse_id = doc_parse.id
-
-    # Convert PDF to DoclingDocument
-    converter = DocumentConverter()
-    docling_doc = converter.convert(pdf_path).document
 
     # Initialize HybridChunker
     tokenizer = OpenAITokenizer(tokenizer=ENCODING, max_tokens=max_tokens)
     chunker = HybridChunker(tokenizer=tokenizer)
 
     total_chunks = 0
+    global_index = 0
     doc_chunks = chunker.chunk(dl_doc=docling_doc)
 
     for chunk in doc_chunks:
@@ -99,14 +95,13 @@ def chunk_pdf(document_id: int, pdf_path: str, max_tokens: int = MAX_TOKENS, ove
         # Tokenize text, chunking with overlap and save in DB
         tokens = ENCODING.encode(enriched_text)
         start = 0
-        chunk_index = 0
 
         while start < len(tokens):
             end = min(start + max_tokens, len(tokens))
             token_chunk = tokens[start:end]
             chunk_text_str = ENCODING.decode(token_chunk)
 
-            total_chunks += chunk_text_from_text(
+            created, global_index = chunk_text_from_text(
                 document_id=document_id,
                 parse_id=parse_id,
                 text=chunk_text_str,
@@ -114,11 +109,73 @@ def chunk_pdf(document_id: int, pdf_path: str, max_tokens: int = MAX_TOKENS, ove
                 section_title=section_title,
                 page_start=page_start,
                 page_end=page_end,
+                start_index=global_index
             )
+
+            total_chunks += created
 
             if end == len(tokens):
                 break
             start = end - overlap
-            chunk_index += 1
 
-    return total_chunks
+    return parse_id, total_chunks
+
+
+def chunk_csv_rows(
+        document_id: int,
+        rows: List[Dict],
+        rows_per_chunk: int = 200,
+        overlap_rows: int = 20,
+        section_title: Optional[str] = "CSV",
+) -> int:
+    """
+    Turns CSV rows into DocumentChunk entries so you can embed them.
+    Chunking is row-based.
+    """
+    db = SessionLocal()
+    try:
+        if not rows:
+            return 0
+
+        headers = list(rows[0].keys())
+        created = 0
+        start = 0
+
+        while start < len(rows):
+            end = min(start + rows_per_chunk, len(rows))
+            chunk_rows = rows[start:end]
+
+            lines = []
+            lines.append("Columns: " + ", ".join(headers))
+            lines.append("Rows:")
+            for r in chunk_rows:
+                lines.append(" | ".join(f"{h}={str(r.get(h, ''))}" for h in headers))
+
+            chunk_text_str = "\n".join(lines)
+            token_count = len(ENCODING.encode(chunk_text_str))
+
+            db_chunk = DocumentChunk(
+                document_id=document_id,
+                parse_id=None,
+                chunk_index=created,
+                token_count=token_count,
+                text=chunk_text_str,
+                section_title=section_title,
+                page_start=None,
+                page_end=None,
+                summary=None,
+                keywords=None,
+                topics=None,
+            )
+            db.add(db_chunk)
+            created += 1
+
+            if end == len(rows):
+                break
+
+            start = max(0, end - overlap_rows)
+
+        db.commit()
+        return created
+    finally:
+        db.close()
