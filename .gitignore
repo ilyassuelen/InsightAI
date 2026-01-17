@@ -3,3 +3,13 @@ __pycache__/
 venv/
 .idea/
 *.sqlite3
+
+# macOS
+.DS_Store
+
+# Local DBs
+backend/database/*.db
+backend/database/*.sqlite3
+
+# Runtime storage (uploads, chroma, etc.)
+backend/storage/
