@@ -8,6 +8,38 @@
 
 ---
 
+## 🖥️ User Interface Preview
+
+### Landing Page & AI Architecture Overview
+
+The landing page introduces InsightAI and explains how the agent works, including an overview of the underlying AI architecture and processing workflow.
+
+<p align="center">
+  <img src="static/images/UIScreenshot_1.png" alt="InsightAI Landing Page and Architecture Overview" width="900"/>
+</p>
+
+---
+
+### Agent Dashboard
+
+The agent dashboard provides access to uploaded documents, shows their processing status, and includes the document upload area along with a sneak preview of the document-aware AI chat.
+
+<p align="center">
+  <img src="static/images/UIScreenshot_2.png" alt="InsightAI Agent Dashboard" width="900"/>
+</p>
+
+---
+
+### AI-Generated Report Preview
+
+This view shows a partial preview of an AI-generated report, demonstrating how extracted insights and structured content are presented to the user.
+
+<p align="center">
+  <img src="static/images/UIScreenshot_3.png" alt="InsightAI Report Preview" width="900"/>
+</p>
+
+---
+
 ## ⚡ Features
 
 - **Document Upload:** Supports PDFs, CSVs, DOCXs and TXTs. 
