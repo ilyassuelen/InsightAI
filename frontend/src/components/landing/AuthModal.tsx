@@ -68,11 +68,12 @@ export function AuthModal({ isOpen, onClose, onAuthenticated }: AuthModalProps) 
               {/* Content */}
               <div className="relative z-10">
                 {/* Logo */}
-                <div className="flex items-center gap-3 mb-8">
-                  <div className="p-2.5 rounded-xl gradient-bg">
-                    <Brain className="w-6 h-6 text-primary-foreground" />
-                  </div>
-                  <span className="text-xl font-display font-bold gradient-text">InsightAI</span>
+                <div className="flex items-center justify-center mb-8">
+                    <img
+                        src="/logo.png"
+                        alt="InsightAI Logo"
+                        className="h-12 w-auto object-contain"
+                    />
                 </div>
 
                 {/* Title */}
