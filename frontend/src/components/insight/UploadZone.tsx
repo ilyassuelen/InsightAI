@@ -1,7 +1,7 @@
-import { useCallback, useState } from 'react';
-import { motion } from 'framer-motion';
-import { Upload, FileUp, Sparkles } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useCallback, useState } from "react";
+import { motion } from "framer-motion";
+import { Upload, FileUp, Sparkles } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface UploadZoneProps {
   onUpload: (file: File) => void;
@@ -29,9 +29,7 @@ export function UploadZone({ onUpload }: UploadZoneProps) {
       setIsDragging(false);
 
       const files = Array.from(e.dataTransfer.files);
-      if (files.length > 0) {
-        onUpload(files[0]);
-      }
+      if (files.length > 0) onUpload(files[0]);
     },
     [onUpload]
   );
@@ -39,10 +37,8 @@ export function UploadZone({ onUpload }: UploadZoneProps) {
   const handleFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
-      if (files && files.length > 0) {
-        onUpload(files[0]);
-      }
-      e.target.value = ''; // reset input
+      if (files && files.length > 0) onUpload(files[0]);
+      e.target.value = "";
     },
     [onUpload]
   );
@@ -51,6 +47,7 @@ export function UploadZone({ onUpload }: UploadZoneProps) {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
       className="w-full"
     >
       <label
@@ -58,14 +55,28 @@ export function UploadZone({ onUpload }: UploadZoneProps) {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={cn(
-          'relative flex flex-col items-center justify-center gap-4 p-8 rounded-xl cursor-pointer',
-          'border-2 border-dashed transition-all duration-300',
+          "relative flex flex-col items-center justify-center gap-6 p-10 rounded-2xl cursor-pointer overflow-hidden",
+          "border-2 border-dashed transition-all duration-500",
           isDragging
-            ? 'border-primary bg-primary/5 glow'
-            : 'border-border hover:border-primary/50 hover:bg-muted/50'
+            ? "border-primary bg-primary/5 glow"
+            : "border-border hover:border-primary/40 hover:bg-card/50"
         )}
       >
-        {/* Hidden file input */}
+        {/* Background decoration */}
+        <div className="absolute inset-0 ai-dots opacity-20" />
+        <div
+          className={cn(
+            "absolute -top-24 -right-24 w-48 h-48 rounded-full blur-3xl transition-opacity duration-500",
+            isDragging ? "bg-primary/20 opacity-100" : "bg-primary/10 opacity-0"
+          )}
+        />
+        <div
+          className={cn(
+            "absolute -bottom-24 -left-24 w-48 h-48 rounded-full blur-3xl transition-opacity duration-500",
+            isDragging ? "bg-accent/20 opacity-100" : "bg-accent/10 opacity-0"
+          )}
+        />
+
         <input
           type="file"
           onChange={handleFileSelect}
@@ -76,34 +87,53 @@ export function UploadZone({ onUpload }: UploadZoneProps) {
 
         {/* Icon */}
         <motion.div
-          animate={isDragging ? { scale: 1.1, y: -5 } : { scale: 1, y: 0 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+          animate={isDragging ? { scale: 1.1, y: -10 } : { scale: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 20 }}
           className={cn(
-            'p-4 rounded-full transition-colors',
-            isDragging ? 'bg-primary/20' : 'bg-muted'
+            "relative p-6 rounded-2xl transition-all duration-300",
+            isDragging ? "gradient-bg glow" : "bg-muted/80"
           )}
         >
           {isDragging ? (
-            <FileUp className="h-8 w-8 text-primary" />
+            <FileUp className="h-10 w-10 text-primary-foreground" />
           ) : (
-            <Upload className="h-8 w-8 text-muted-foreground" />
+            <Upload className="h-10 w-10 text-muted-foreground" />
+          )}
+
+          {/* Pulse ring */}
+          {isDragging && (
+            <motion.div
+              initial={{ scale: 1, opacity: 0.5 }}
+              animate={{ scale: 1.5, opacity: 0 }}
+              transition={{ duration: 1, repeat: Infinity }}
+              className="absolute inset-0 rounded-2xl border-2 border-primary"
+            />
           )}
         </motion.div>
 
         {/* Text */}
-        <div className="text-center">
-          <p className="text-sm font-medium text-foreground">
-            {isDragging ? 'Drop your file here' : 'Drag & drop your document'}
+        <div className="relative text-center z-10">
+          <p className="text-lg font-display font-semibold text-foreground mb-2">
+            {isDragging ? "Drop your file here" : "Upload your document"}
           </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            or click to browse • PDF, DOC, TXT, JSON, CSV
-          </p>
+          <p className="text-sm text-muted-foreground">Drag & drop or click to browse</p>
+
+          <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">
+            {["PDF", "DOCX", "TXT", "CSV"].map((type) => (
+              <span
+                key={type}
+                className="px-2 py-1 rounded-md bg-muted text-xs font-mono text-muted-foreground"
+              >
+                .{type.toLowerCase()}
+              </span>
+            ))}
+          </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center gap-2 text-xs text-primary">
-          <Sparkles className="h-3 w-3" />
-          <span>AI-powered analysis</span>
+        {/* AI badge */}
+        <div className="relative flex items-center gap-2 px-4 py-2 rounded-full glass-subtle border border-primary/20">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium gradient-text">AI-powered analysis</span>
         </div>
       </label>
     </motion.div>
