@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -11,7 +12,7 @@ from backend.services.gemini_client import embed_texts as gemini_embed_texts
 
 logger = logging.getLogger(__name__)
 
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), max_retries=0)
 
 # ------------------------
 # JSON / CHAT COMPLETION
@@ -25,7 +26,8 @@ def generate_json(
     max_tokens: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
-    OpenAI first, Gemini fallback on 429 / connection / 5xx.
+    OpenAI first. Immediate Gemini fallback on 429.
+    For transient network/5xx: one quick retry, then Gemini.
     """
     try:
         response = openai_client.chat.completions.create(
@@ -38,13 +40,11 @@ def generate_json(
             max_tokens=max_tokens,
             response_format={"type": "json_object"},
         )
-
         raw = response.choices[0].message.content or ""
         return json.loads(raw)
 
-    except (RateLimitError, APIConnectionError, APIError) as e:
-        logger.warning(f"OpenAI failed ({type(e).__name__}), falling back to Gemini")
-
+    except RateLimitError as e:
+        logger.warning(f"OpenAI 429 -> immediate Gemini fallback: {e}")
         return gemini_generate_json(
             model="gemini-2.5-flash",
             system_instruction=system_prompt,
@@ -52,6 +52,32 @@ def generate_json(
             temperature=temperature,
             max_output_tokens=max_tokens,
         )
+
+    except (APIConnectionError, APIError) as e:
+        # One quick retry on OpenAI, then fallback
+        logger.warning(f"OpenAI transient error ({type(e).__name__}) -> retry once, then Gemini")
+        time.sleep(1.0)
+        try:
+            response = openai_client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format={"type": "json_object"},
+            )
+            raw = response.choices[0].message.content or ""
+            return json.loads(raw)
+        except Exception:
+            return gemini_generate_json(
+                model="gemini-2.5-flash",
+                system_instruction=system_prompt,
+                user_prompt=user_prompt,
+                temperature=temperature,
+                max_output_tokens=max_tokens,
+            )
 
 
 # ------------------------
@@ -61,16 +87,16 @@ def embed_texts(texts: List[str]) -> List[List[float]]:
     """
     OpenAI embeddings first, Gemini fallback.
     """
-    try:
-        response = openai_client.embeddings.create(
-            model="text-embedding-3-small",
-            input=texts,
-        )
-        return [item.embedding for item in response.data]
-
-    except (RateLimitError, APIConnectionError, APIError) as e:
-        logger.warning(f"OpenAI embeddings failed, using Gemini embeddings: {e}")
-        return gemini_embed_texts(
-            model="gemini-embedding-001",
-            texts=texts,
-        )
+    batch_size = 64
+    out: List[List[float]] = []
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i + batch_size]
+        try:
+            response = openai_client.embeddings.create(
+                model="text-embedding-3-small",
+                input=batch,
+            )
+            out.extend([item.embedding for item in response.data])
+        except (RateLimitError, APIConnectionError, APIError):
+            out.extend(gemini_embed_texts(model="gemini-embedding-001", texts=batch))
+    return out

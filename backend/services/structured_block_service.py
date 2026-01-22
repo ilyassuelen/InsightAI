@@ -9,11 +9,11 @@ from backend.services.llm_provider import generate_json
 logger = logging.getLogger(__name__)
 
 # -------------------- CONFIG --------------------
-MAX_CONCURRENT_LLM_CALLS = 2
+MAX_CONCURRENT_LLM_CALLS = 1
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLM_CALLS)
 
 # Number of blocks per LLM call
-BATCH_SIZE = 3
+BATCH_SIZE = 8
 
 SYSTEM_PROMPT = """
 You are an information extraction engine.
@@ -148,8 +148,10 @@ async def structure_blocks(document_id: int, parse_id: Optional[int]) -> List[Di
 
         # Split into batches
         batches = [blocks[i:i + BATCH_SIZE] for i in range(0, len(blocks), BATCH_SIZE)]
-        batch_tasks = [structure_block_batch(batch) for batch in batches]
-        batch_results = await asyncio.gather(*batch_tasks)
+        batch_results = []
+        for batch in batches:
+            batch_results.append(await structure_block_batch(batch))
+            await asyncio.sleep(1.0)
 
         # Merge maps
         merged: Dict[int, Dict] = {}
