@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -80,6 +80,80 @@ Return JSON schema:
 """.strip()
 
 
+# -------------------- HELPERS FOR NORMALIZATION --------------------
+def parse_number_de(value: str) -> Optional[float]:
+    """
+    Parses German-style numbers:
+    - "1.875.394" -> 1875394
+    - "1,23" -> 1.23
+    """
+    if not value:
+        return None
+    s = value.strip().replace(" ", "")
+    s = s.replace(".", "").replace(",", ".")
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def detect_currency(unit: str) -> str:
+    u = (unit or "").lower()
+    if ("€" in u) or ("eur" in u) or ("euro" in u):
+        return "EUR"
+    if ("$" in u) or ("usd" in u) or ("dollar" in u):
+        return "USD"
+    return "UNKNOWN"
+
+
+def currency_symbol(currency: str) -> str:
+    return "€" if currency == "EUR" else "$" if currency == "USD" else ""
+
+
+def format_compact_money(amount: float, currency: str) -> str:
+    sym = currency_symbol(currency)
+
+    if amount >= 1_000_000_000:
+        return (f"{amount / 1_000_000_000:.2f}".replace(".", ",") + f" Mrd. {sym}").strip()
+    if amount >= 1_000_000:
+        return (f"{amount / 1_000_000:.2f}".replace(".", ",") + f" Mio. {sym}").strip()
+    return (f"{int(round(amount)):,}".replace(",", ".") + f" {sym}").strip()
+
+
+def is_thousand_unit(unit: str) -> bool:
+    u = (unit or "").lower().replace(".", "").strip()
+    return ("tausend" in u) or ("tsd" in u) or ("thousand" in u) or ("k€" in u) or ("keur" in u) or ("kusd" in u)
+
+
+def normalize_key_figure(kf: KeyFigure) -> KeyFigure:
+    unit = (kf.unit or "").strip()
+    currency = detect_currency(unit)
+
+    # Only normalize for known currencies (EUR/USD)
+    if currency == "UNKNOWN":
+        return kf
+
+    num = parse_number_de(kf.value)
+    if num is None:
+        return kf
+
+    # Thousand scaling
+    if is_thousand_unit(unit):
+        amount = num * 1000.0
+        kf.value = format_compact_money(amount, currency)
+        kf.unit = ""  # value already includes symbol
+        return kf
+
+    # Plain currency: compact only if large
+    if unit in ["€", "EUR", "$", "USD"] and num >= 1_000_000:
+        kf.value = format_compact_money(num, currency)
+        kf.unit = ""
+        return kf
+
+    return kf
+
+
+# -------------------- MAIN --------------------
 def generate_report_for_document(db: Session, document_id: int) -> Dict[str, Any]:
     document = db.query(Document).filter(Document.id == document_id).first()
     if not document:
@@ -164,12 +238,12 @@ Evidence (use only this):
                     except Exception:
                         continue
 
-            key_figures = validated
+            key_figures = [normalize_key_figure(kf) for kf in validated]
 
             # Build a readable, user-friendly text (no raw JSON)
             lines = []
             for kf in key_figures:
-                unit = "" if kf.unit == "unknown" else f" {kf.unit}"
+                unit = "" if (kf.unit in ["", "unknown"]) else f" {kf.unit}"
                 context = f" ({kf.context})" if kf.context else ""
                 lines.append(f"- {kf.name}: {kf.value}{unit}{context}")
             pretty_content = "\n".join(lines) if lines else "No key figures could be extracted from the evidence."

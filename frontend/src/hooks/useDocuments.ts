@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Document, DocumentStatus, Report } from '@/types/document';
+import { Document, DocumentStatus } from '@/types/document';
+import type { Report } from '@/types/report';
 
 const API_BASE = 'http://localhost:8000';
 
@@ -130,8 +131,9 @@ export function useDocuments() {
 
       data.sections =
         data.sections?.map((s: any) => ({
-          title: s.title ?? s.heading ?? 'Section',
+          heading: s.heading ?? s.title ?? 'Section',
           content: normalizeContent(s.content),
+          sources: s.sources ?? [],
         })) ?? [];
 
       setReport(data);
