@@ -1,18 +1,12 @@
-import os
-import json
 import asyncio
 import logging
 from typing import List, Dict, Optional
-from dotenv import load_dotenv
-from openai import AsyncOpenAI
+
 from backend.database.database import SessionLocal
 from backend.models.document_block import DocumentBlock
-
-load_dotenv()
+from backend.services.llm_provider import generate_json
 
 logger = logging.getLogger(__name__)
-
-client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # -------------------- CONFIG --------------------
 MAX_CONCURRENT_LLM_CALLS = 2
@@ -65,7 +59,7 @@ Field rules:
 # -------------------- LLM CALL (BATCH) --------------------
 async def structure_block_batch(blocks: List[DocumentBlock]) -> Dict[int, Dict]:
     """
-    Sends a batch of DocumentBlocks to the LLM.
+    Sends a batch of DocumentBlocks to the LLM provider (OpenAI -> Gemini fallback).
     Returns a mapping: block_id -> {section_type, title, summary}
     """
     async with semaphore:
@@ -81,20 +75,16 @@ async def structure_block_batch(blocks: List[DocumentBlock]) -> Dict[int, Dict]:
         )
 
         try:
-            response = await client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=0,
-                response_format={"type": "json_object"},
+            data = await asyncio.to_thread(
+                lambda: generate_json(
+                    model="gpt-4o-mini",
+                    system_prompt=SYSTEM_PROMPT,
+                    user_prompt=user_prompt,
+                    temperature=0.0,
+                )
             )
 
-            raw = (response.choices[0].message.content or "").strip()
-            data = json.loads(raw)
-
-            items = data.get("items", [])
+            items = data.get("items", []) if isinstance(data, dict) else []
             out: Dict[int, Dict] = {}
 
             for item in items:
@@ -103,12 +93,12 @@ async def structure_block_batch(blocks: List[DocumentBlock]) -> Dict[int, Dict]:
                     bid = int(bid)
                 except (TypeError, ValueError):
                     continue
-                if isinstance(bid, int):
-                    out[bid] = {
-                        "section_type": item.get("section_type", "other"),
-                        "title": item.get("title", None),
-                        "summary": (item.get("summary") or "")[:500],
-                    }
+
+                out[bid] = {
+                    "section_type": item.get("section_type", "other"),
+                    "title": item.get("title", None),
+                    "summary": (item.get("summary") or "")[:500],
+                }
 
             # Fallback for every Block
             for b in blocks:
@@ -158,8 +148,6 @@ async def structure_blocks(document_id: int, parse_id: Optional[int]) -> List[Di
 
         # Split into batches
         batches = [blocks[i:i + BATCH_SIZE] for i in range(0, len(blocks), BATCH_SIZE)]
-
-        # Run batched LLM calls concurrently (bounded by semaphore)
         batch_tasks = [structure_block_batch(batch) for batch in batches]
         batch_results = await asyncio.gather(*batch_tasks)
 
@@ -185,7 +173,7 @@ async def structure_blocks(document_id: int, parse_id: Optional[int]) -> List[Di
                     "block_id": b.id,
                     "section_type": b.semantic_label,
                     "title": b.title,
-                    "content": b.content,  # original content
+                    "content": b.content,
                     "summary": b.summary,
                 }
             )

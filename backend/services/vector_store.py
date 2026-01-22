@@ -3,11 +3,10 @@ from dotenv import load_dotenv
 from typing import List, Dict
 import chromadb
 from chromadb.config import Settings
-from openai import OpenAI
+
+from backend.services.llm_provider import embed_texts as provider_embed_texts
 
 load_dotenv()
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Persist locally (Create folder)
 CHROMA_DIR = "backend/storage/chroma"
@@ -20,15 +19,6 @@ chroma_client = chromadb.PersistentClient(
     settings=Settings(anonymized_telemetry=False),
 )
 collection = chroma_client.get_or_create_collection(name=COLLECTION_NAME)
-
-
-def embed_texts(texts: List[str]) -> List[List[float]]:
-    """Create embeddings for a list of texts using text-embedding-3-small."""
-    response = client.embeddings.create(
-        model="text-embedding-3-small",
-        input=texts,
-    )
-    return [item.embedding for item in response.data]
 
 
 def upsert_document_chunks(document_id: int, chunks: List[Dict]):
@@ -51,7 +41,7 @@ def upsert_document_chunks(document_id: int, chunks: List[Dict]):
         "keywords": ", ".join(c["keywords"]) if "keywords" in c else ""
     } for c in chunks]
 
-    embeddings = embed_texts(texts)
+    embeddings = provider_embed_texts(texts)
 
     collection.upsert(
         ids=ids,
@@ -63,7 +53,7 @@ def upsert_document_chunks(document_id: int, chunks: List[Dict]):
 
 def query_similar_chunks(document_id: int, query: str, k: int = 5) -> List[Dict]:
     """Return top-k chunks (text + metadata) for a document_id."""
-    q_emb = embed_texts([query])[0]
+    q_emb = provider_embed_texts([query])[0]
 
     response = collection.query(
         query_embeddings=[q_emb],

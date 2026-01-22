@@ -1,18 +1,15 @@
-import os
-import json
 import logging
 from typing import Any, Dict, List
 
 from sqlalchemy.orm import Session
-from openai import OpenAI
 
+from backend.services.llm_provider import generate_json
 from backend.models.document import Document
 from backend.models.document_block import DocumentBlock
 from backend.services.vector_store import query_similar_chunks
 from backend.services.report_schema import ReportModel, ReportSection, KeyFigure
 
 logger = logging.getLogger(__name__)
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 REPORT_SECTIONS = [
     ("Executive Summary", "High-level overview of the document and its purpose."),
@@ -84,7 +81,6 @@ Return JSON schema:
 
 
 def generate_report_for_document(db: Session, document_id: int) -> Dict[str, Any]:
-    # 1) Load document
     document = db.query(Document).filter(Document.id == document_id).first()
     if not document:
         raise ValueError(f"Document {document_id} not found")
@@ -94,12 +90,11 @@ def generate_report_for_document(db: Session, document_id: int) -> Dict[str, Any
     sections: List[ReportSection] = []
     key_figures: List[KeyFigure] = []
 
-    # 2) Build each section
     for heading, instruction in REPORT_SECTIONS:
-        # 2a) Retrieve evidence from Chroma
+        # 1) Evidence from Chroma (RAG)
         hits = query_similar_chunks(document_id=document_id, query=f"{heading}. {instruction}", k=8)
 
-        # 2b) Fallback: if Chroma is empty, use DB blocks
+        # 2) Fallback: if Chroma is empty, use DB blocks
         if not hits:
             blocks = (
                 db.query(DocumentBlock)
@@ -121,7 +116,7 @@ def generate_report_for_document(db: Session, document_id: int) -> Dict[str, Any
                 for b in blocks
             ]
 
-        # 2c) Format evidence text (compact)
+        # 3) Build Evidence-Text
         evidence_parts = []
         for h in hits:
             md = h.get("metadata") or {}
@@ -131,8 +126,8 @@ def generate_report_for_document(db: Session, document_id: int) -> Dict[str, Any
             )
         evidence_text = "\n\n---\n\n".join(evidence_parts)[:14000]  # safety cap
 
-        # 2d) Build fallback sources (always available)
-        sources_fallback = []
+        # 4) Sources fallback
+        sources_fallback: List[Dict[str, Any]] = []
         for h in hits:
             md = h.get("metadata") or {}
             sources_fallback.append({
@@ -150,30 +145,26 @@ Evidence (use only this):
 {evidence_text}
 """.strip()
 
-        # 2e) Call LLM (JSON only)
+        # 5) LLM Call: OpenAI primary, Gemini fallback
         if heading == "Key Figures":
-            response = client.chat.completions.create(
+            data = generate_json(
                 model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": SYSTEM_KEYFIGURES},
-                    {"role": "user", "content": user_prompt},
-                ],
+                system_prompt=SYSTEM_KEYFIGURES,
+                user_prompt=user_prompt,
                 temperature=0.2,
-                response_format={"type": "json_object"},
             )
-            data = json.loads((response.choices[0].message.content or "{}").strip())
 
             extracted = data.get("key_figures", [])
-            validated_key_figures: List[KeyFigure] = []
+            validated: List[KeyFigure] = []
 
             if isinstance(extracted, list):
                 for item in extracted[:12]:
                     try:
-                        validated_key_figures.append(KeyFigure(**item))
+                        validated.append(KeyFigure(**item))
                     except Exception:
                         continue
 
-            key_figures = validated_key_figures
+            key_figures = validated
 
             # Build a readable, user-friendly text (no raw JSON)
             lines = []
@@ -181,7 +172,6 @@ Evidence (use only this):
                 unit = "" if kf.unit == "unknown" else f" {kf.unit}"
                 context = f" ({kf.context})" if kf.context else ""
                 lines.append(f"- {kf.name}: {kf.value}{unit}{context}")
-
             pretty_content = "\n".join(lines) if lines else "No key figures could be extracted from the evidence."
 
             section_dict = {
@@ -192,18 +182,16 @@ Evidence (use only this):
             }
 
         else:
-            response = client.chat.completions.create(
+            section_dict = generate_json(
                 model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": SYSTEM_SECTION},
-                    {"role": "user", "content": user_prompt},
-                ],
+                system_prompt=SYSTEM_SECTION,
+                user_prompt=user_prompt,
                 temperature=0.2,
-                response_format={"type": "json_object"},
             )
-            section_dict = json.loads((response.choices[0].message.content or "{}").strip())
 
-            # Ensure required fields exist (simple guardrails)
+            # Guardrails
+            if not isinstance(section_dict, dict):
+                section_dict = {}
             if not section_dict.get("heading"):
                 section_dict["heading"] = heading
             if section_dict.get("content") is None:
@@ -211,23 +199,18 @@ Evidence (use only this):
             if not isinstance(section_dict.get("sources"), list):
                 section_dict["sources"] = sources_fallback
 
-        # 2f) Validate section with Pydantic (guarantees structure)
         section_obj = ReportSection(**section_dict)
         sections.append(section_obj)
 
-    # 3) Final wrapper (title/summary/conclusion) from drafted sections
+    # 6) Final wrapper call
     assembled = "\n\n".join([f"{s.heading}\n{s.content}" for s in sections])
 
-    final_response = client.chat.completions.create(
+    final_json = generate_json(
         model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": SYSTEM_FINAL},
-            {"role": "user", "content": f"Drafted sections:\n\n{assembled}"},
-        ],
+        system_prompt=SYSTEM_FINAL,
+        user_prompt=f"Drafted sections:\n\n{assembled}",
         temperature=0.2,
-        response_format={"type": "json_object"},
     )
-    final_json = json.loads((final_response.choices[0].message.content or "{}").strip())
 
     report = ReportModel(
         title=final_json.get("title", f"Report for {document.filename}"),

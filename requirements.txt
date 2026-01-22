@@ -9,3 +9,4 @@ docling
 tiktoken
 python-docx
 chromadb
+google-genai
