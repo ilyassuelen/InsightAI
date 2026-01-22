@@ -20,8 +20,11 @@ export interface ReportSection {
   content: string;
 }
 
-export interface KeyFigures {
-  [key: string]: number | string;
+export interface KeyFigure {
+  name: string;
+  value: string;
+  unit: string;
+  context?: string;
 }
 
 export interface Report {
@@ -29,7 +32,7 @@ export interface Report {
   title?: string;
   summary?: string;
   sections: ReportSection[];
-  key_figures?: KeyFigures;
+  key_figures?: KeyFigure[];
   conclusion?: string;
   generated_at: string;
 }

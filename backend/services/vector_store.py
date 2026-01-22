@@ -69,7 +69,7 @@ def query_similar_chunks(document_id: int, query: str, k: int = 5) -> List[Dict]
         query_embeddings=[q_emb],
         n_results=k,
         where={"document_id": document_id},
-        include=["documents", "metadatas", "distances", "ids"],
+        include=["documents", "metadatas", "distances"],
     )
 
     hits = []

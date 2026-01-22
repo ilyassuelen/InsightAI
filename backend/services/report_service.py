@@ -1,142 +1,240 @@
 import os
 import json
 import logging
+from typing import Any, Dict, List
+
 from sqlalchemy.orm import Session
 from openai import OpenAI
-import tiktoken
 
 from backend.models.document import Document
 from backend.models.document_block import DocumentBlock
+from backend.services.vector_store import query_similar_chunks
+from backend.services.report_schema import ReportModel, ReportSection, KeyFigure
 
 logger = logging.getLogger(__name__)
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-SYSTEM_PROMPT = """
-You are an expert business analyst and report writer.
+REPORT_SECTIONS = [
+    ("Executive Summary", "High-level overview of the document and its purpose."),
+    ("Key Findings", "Most important insights, takeaways, patterns or decisions."),
+    ("Key Figures", "Extract explicit numerical values, totals, KPIs stated in the document."),
+    ("Risks & Issues", "Risks, inconsistencies, missing data, warnings, concerns."),
+    ("Conclusion", "Concluding statement based strictly on the document."),
+]
 
-Your task is to create a professional, structured report based solely on the provided document content.
-Do not add external knowledge or assumptions.
-Use clear, concise, and professional language suitable for business and management audiences.
+SYSTEM_SECTION = """
+You are an expert business analyst.
 
-If numerical data, tables, or KPIs are present in the document, extract the most relevant figures.
-Only include values that are explicitly stated in the document.
-Do not calculate, estimate, or infer any values.
+Rules:
+- Use ONLY the evidence.
+- Do not invent facts or numbers.
+- Output JSON only.
 
-Return STRICTLY valid JSON and do NOT include any text outside of JSON.
-If you cannot produce a report, return an empty JSON object: {}.
-The JSON must follow this exact schema:
-
+Return JSON schema:
 {
-    "title": string,
-    "summary": string,
-    "sections": [
-        {
-            "heading": string,
-            "content": string
-        }
-    ],
-    "key_figures": object,
-    "conclusion": string
+  "heading": string,
+  "content": string,
+  "sources": [
+    {"chunk_id": string, "page_start": integer|null, "page_end": integer|null, "section_title": string|null}
+  ]
 }
-"""
+""".strip()
 
-USER_PROMPT_TEMPLATE = """
-Create a professional report based on the following document content.
-Return only JSON following the schema provided in the system prompt.
+SYSTEM_KEYFIGURES = """
+You extract key figures (KPIs / numbers) from evidence.
 
-Document content:
----
-{content}
----
-"""
+Rules:
+- Use ONLY evidence. Do not use external knowledge.
+- Do NOT calculate or infer missing values.
+- Return AT MOST 12 key figures (pick the most important ones).
+- Each value MUST include its unit or scale if explicitly present in evidence (e.g. €, EUR, USD, %, million €, bn €, k€).
+- If the evidence does not clearly state the unit/scale, set unit to "unknown" and keep the raw value as written.
 
-# Limits per model
-GPT4O_TPM_LIMIT = 100_000
-GPT4O_MAX_CONTEXT = 128_000
-GPT5_MAX_CONTEXT = 400_000
+Output MUST be valid JSON only.
 
+Return JSON schema:
+{
+  "key_figures": [
+    {
+      "name": string,
+      "value": string,
+      "unit": string,
+      "context": string
+    }
+  ],
+  "sources": [
+    {"chunk_id": string, "page_start": integer|null, "page_end": integer|null, "section_title": string|null}
+  ]
+}
 
-def estimate_tokens(text: str, model_name: str = "gpt-4o-mini") -> int:
-    """
-    Uses OpenAI's tiktoken library for token counting.
-    """
-    encoding = tiktoken.encoding_for_model(model_name)
-    return len(encoding.encode(text))
+Field notes:
+- "name": short clear KPI name (e.g. "Total revenue 2023/24")
+- "value": the number exactly as shown (e.g. "3.2", "51.2", "1,027")
+- "unit": must be explicit ("EUR", "€", "%", "million €", "unknown", etc.)
+- "context": short hint like year/club/metric reference
+""".strip()
 
+SYSTEM_FINAL = """
+You create the final report wrapper based ONLY on the drafted sections.
+Output JSON only.
 
-def choose_llm_model(token_count: int) -> str:
-    """
-    Choose the model based on the number of tokens:
-    - gpt-4o-mini for smaller documents, as long as the TPM limit is not exceeded
-    - gpt-5-mini as a fallback for larger documents
-    """
-    if token_count <= min(GPT4O_MAX_CONTEXT, GPT4O_TPM_LIMIT):
-        return "gpt-4o-mini"
-    else:
-        return "gpt-5-mini"
-
-
-def run_llm_completion(system_prompt: str, user_prompt: str, token_count: int) -> str:
-    """
-    Send prompts to OpenAI GPT and return the text response.
-    Dynamic model selection based on document size.
-    """
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-    model_to_use = choose_llm_model(token_count)
-    logger.info(f"Using model {model_to_use} for {token_count} tokens")
-
-    response = client.chat.completions.create(
-        model=model_to_use,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.2
-    )
-    return response.choices[0].message.content
+Return JSON schema:
+{ "title": string, "summary": string, "conclusion": string }
+""".strip()
 
 
-def generate_report_for_document(db: Session, document_id: int) -> dict:
-    """
-    Generates a structured report for a document using prepared document blocks.
-    Returns the parsed report JSON.
-    """
-    logger.info(f"Generating report for document {document_id}")
-
+def generate_report_for_document(db: Session, document_id: int) -> Dict[str, Any]:
+    # 1) Load document
     document = db.query(Document).filter(Document.id == document_id).first()
     if not document:
         raise ValueError(f"Document {document_id} not found")
 
-    blocks = (
-        db.query(DocumentBlock)
-        .filter(DocumentBlock.document_id == document_id)
-        .order_by(DocumentBlock.block_index)
-        .all()
+    logger.info(f"Generating report (section-by-section) for document {document_id}")
+
+    sections: List[ReportSection] = []
+    key_figures: List[KeyFigure] = []
+
+    # 2) Build each section
+    for heading, instruction in REPORT_SECTIONS:
+        # 2a) Retrieve evidence from Chroma
+        hits = query_similar_chunks(document_id=document_id, query=f"{heading}. {instruction}", k=8)
+
+        # 2b) Fallback: if Chroma is empty, use DB blocks
+        if not hits:
+            blocks = (
+                db.query(DocumentBlock)
+                .filter(DocumentBlock.document_id == document_id)
+                .order_by(DocumentBlock.block_index)
+                .limit(12)
+                .all()
+            )
+            hits = [
+                {
+                    "id": f"block_{b.id}",
+                    "text": b.content,
+                    "metadata": {
+                        "page_start": None,
+                        "page_end": None,
+                        "section_title": b.title or b.semantic_label,
+                    },
+                }
+                for b in blocks
+            ]
+
+        # 2c) Format evidence text (compact)
+        evidence_parts = []
+        for h in hits:
+            md = h.get("metadata") or {}
+            evidence_parts.append(
+                f"[{h.get('id')}] (p{md.get('page_start')}–{md.get('page_end')}, section={md.get('section_title')})\n"
+                f"{(h.get('text') or '').strip()}"
+            )
+        evidence_text = "\n\n---\n\n".join(evidence_parts)[:14000]  # safety cap
+
+        # 2d) Build fallback sources (always available)
+        sources_fallback = []
+        for h in hits:
+            md = h.get("metadata") or {}
+            sources_fallback.append({
+                "chunk_id": h.get("id"),
+                "page_start": md.get("page_start"),
+                "page_end": md.get("page_end"),
+                "section_title": md.get("section_title"),
+            })
+
+        user_prompt = f"""
+Section: {heading}
+Instruction: {instruction}
+
+Evidence (use only this):
+{evidence_text}
+""".strip()
+
+        # 2e) Call LLM (JSON only)
+        if heading == "Key Figures":
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": SYSTEM_KEYFIGURES},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.2,
+                response_format={"type": "json_object"},
+            )
+            data = json.loads((response.choices[0].message.content or "{}").strip())
+
+            extracted = data.get("key_figures", [])
+            validated_key_figures: List[KeyFigure] = []
+
+            if isinstance(extracted, list):
+                for item in extracted[:12]:
+                    try:
+                        validated_key_figures.append(KeyFigure(**item))
+                    except Exception:
+                        continue
+
+            key_figures = validated_key_figures
+
+            # Build a readable, user-friendly text (no raw JSON)
+            lines = []
+            for kf in key_figures:
+                unit = "" if kf.unit == "unknown" else f" {kf.unit}"
+                context = f" ({kf.context})" if kf.context else ""
+                lines.append(f"- {kf.name}: {kf.value}{unit}{context}")
+
+            pretty_content = "\n".join(lines) if lines else "No key figures could be extracted from the evidence."
+
+            section_dict = {
+                "heading": heading,
+                "content": pretty_content,
+                "sources": data.get("sources", sources_fallback) if isinstance(data.get("sources"),
+                                                                               list) else sources_fallback,
+            }
+
+        else:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": SYSTEM_SECTION},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.2,
+                response_format={"type": "json_object"},
+            )
+            section_dict = json.loads((response.choices[0].message.content or "{}").strip())
+
+            # Ensure required fields exist (simple guardrails)
+            if not section_dict.get("heading"):
+                section_dict["heading"] = heading
+            if section_dict.get("content") is None:
+                section_dict["content"] = ""
+            if not isinstance(section_dict.get("sources"), list):
+                section_dict["sources"] = sources_fallback
+
+        # 2f) Validate section with Pydantic (guarantees structure)
+        section_obj = ReportSection(**section_dict)
+        sections.append(section_obj)
+
+    # 3) Final wrapper (title/summary/conclusion) from drafted sections
+    assembled = "\n\n".join([f"{s.heading}\n{s.content}" for s in sections])
+
+    final_response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": SYSTEM_FINAL},
+            {"role": "user", "content": f"Drafted sections:\n\n{assembled}"},
+        ],
+        temperature=0.2,
+        response_format={"type": "json_object"},
+    )
+    final_json = json.loads((final_response.choices[0].message.content or "{}").strip())
+
+    report = ReportModel(
+        title=final_json.get("title", f"Report for {document.filename}"),
+        summary=final_json.get("summary", ""),
+        sections=sections,
+        key_figures=key_figures,
+        conclusion=final_json.get("conclusion", ""),
     )
 
-    if not blocks:
-        raise ValueError(f"No blocks found for document {document_id}")
-
-    # Combine block contents
-    combined_text = "\n\n".join(block.content for block in blocks)
-    token_count = estimate_tokens(combined_text, model_name="gpt-4o-mini")
-
-    user_prompt = USER_PROMPT_TEMPLATE.format(content=combined_text)
-
-    logger.info(f"Sending report prompt to LLM for document {document_id} ({token_count} tokens)")
-
-    llm_response = run_llm_completion(
-        system_prompt=SYSTEM_PROMPT,
-        user_prompt=user_prompt,
-        token_count=token_count
-    )
-
-    try:
-        report_json = json.loads(llm_response)
-    except json.JSONDecodeError as e:
-        logger.exception("Failed to parse LLM response as JSON")
-        raise ValueError("Invalid LLM report output") from e
-
-    logger.info(f"Report generation completed for document {document_id}")
-
-    return report_json
+    return report.model_dump()

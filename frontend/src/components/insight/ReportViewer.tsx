@@ -22,6 +22,21 @@ interface CollapsibleSectionProps {
   index: number;
 }
 
+function formatUnit(unit: string | undefined): string {
+  if (!unit) return "";
+
+  const normalized = unit.toLowerCase();
+
+  if (normalized.includes("tausend")) return "€";
+  if (normalized.includes("million")) return "€";
+  if (normalized.includes("mio")) return "€";
+  if (normalized.includes("bn")) return "€";
+  if (normalized.includes("usd")) return "$";
+  if (normalized.includes("eur")) return "€";
+
+  return unit;
+}
+
 function CollapsibleSection({ section, index }: CollapsibleSectionProps) {
   const [isOpen, setIsOpen] = useState(index === 0);
 
@@ -29,7 +44,6 @@ function CollapsibleSection({ section, index }: CollapsibleSectionProps) {
     if (content === null || content === undefined) return "";
     if (typeof content === "string") return content;
     if (typeof content === "number") return String(content);
-    // objects/arrays -> pretty JSON
     try {
       return JSON.stringify(content, null, 2);
     } catch {
@@ -53,7 +67,7 @@ function CollapsibleSection({ section, index }: CollapsibleSectionProps) {
             {String(index + 1).padStart(2, "0")}
           </span>
           <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
-            {section.title ?? "Untitled"}
+            {section.heading ?? "Untitled"}
           </span>
         </div>
 
@@ -126,6 +140,9 @@ export function ReportViewer({ report, isLoading, documentName }: ReportViewerPr
     );
   }
 
+  // ✅ FIX: define keyFigures safely
+  const keyFigures = Array.isArray(report.key_figures) ? report.key_figures : [];
+
   const generatedLabel =
     report.generated_at ? new Date(report.generated_at).toLocaleString() : "unknown";
 
@@ -164,7 +181,7 @@ export function ReportViewer({ report, isLoading, documentName }: ReportViewerPr
       )}
 
       {/* Key Figures */}
-      {report.key_figures && Object.keys(report.key_figures).length > 0 && (
+      {keyFigures.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 className="h-4 w-4 text-primary" />
@@ -174,9 +191,9 @@ export function ReportViewer({ report, isLoading, documentName }: ReportViewerPr
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {Object.entries(report.key_figures).map(([key, value], idx) => (
+            {keyFigures.slice(0, 12).map((kf, idx) => (
               <motion.div
-                key={key}
+                key={`${kf.name}-${idx}`}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 0.1 + idx * 0.05 }}
@@ -185,7 +202,7 @@ export function ReportViewer({ report, isLoading, documentName }: ReportViewerPr
                 <div className="flex items-center gap-2 mb-2">
                   <Hash className="h-3 w-3 text-primary" />
                   <span className="text-xs text-muted-foreground truncate">
-                    {key.replace(/_/g, " ")}
+                    {kf.name}
                   </span>
                 </div>
 
@@ -195,10 +212,15 @@ export function ReportViewer({ report, isLoading, documentName }: ReportViewerPr
                     "group-hover:gradient-text"
                   )}
                 >
-                  {typeof value === "string" || typeof value === "number"
-                    ? value
-                    : JSON.stringify(value)}
+                  {kf.value}
+                  {kf.unit && kf.unit !== "unknown" ? ` ${formatUnit(kf.unit)}` : ""}
                 </p>
+
+                {kf.context && (
+                  <div className="text-[11px] text-muted-foreground mt-2 truncate">
+                    {kf.context}
+                  </div>
+                )}
               </motion.div>
             ))}
           </div>
