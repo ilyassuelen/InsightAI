@@ -6,19 +6,25 @@ import logging
 from backend.database.database import SessionLocal
 from backend.models.document import Document
 from backend.models.report import Report
-from backend.parsers.csv_parser import parse_csv
+from backend.models.document_chunk import DocumentChunk
+
+from backend.parsers.csv_parser import iter_csv_rows
 from backend.parsers.txt_parser import parse_txt
 from backend.parsers.docx_parser import parse_docx
-from backend.services.chunking_service import chunk_text_from_text, chunk_csv_rows, chunk_pdf, MAX_TOKENS
+
+from backend.services.chunking_service import (
+    chunk_text_from_text,
+    chunk_csv_stream,
+    chunk_pdf,
+    MAX_TOKENS
+)
 from backend.services.document_block_service import create_blocks_from_chunks
 from backend.services.structured_block_service import structure_blocks
 from backend.services.report_service import generate_report_for_document
 from backend.services.csv_block_service import create_blocks_from_csv_rows
-from backend.models.document_chunk import DocumentChunk
 from backend.services.vector_store import upsert_document_chunks, delete_document_chunks
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
 
 
@@ -67,6 +73,7 @@ async def process_document_logic(document_id: int):
             logger.error(f"Document {document_id} not found")
             return
 
+        # Clear existing chunks + vectorstore for this document
         db.query(DocumentChunk) \
             .filter(DocumentChunk.document_id == document.id) \
             .delete()
@@ -76,27 +83,44 @@ async def process_document_logic(document_id: int):
         document.file_status = "processing"
         db.commit()
 
-        # Parsing and block creation
         parse_id = None
 
+        # ---------------- CSV ----------------
         if document.file_type in ("text/csv", "application/csv"):
-            rows = parse_csv(document.storage_path)
+            # Stream rows (memory safe)
+            rows_iter = iter_csv_rows(document.storage_path)
 
-            if not rows:
+            # Chunk stream into DocumentChunk (token safe)
+            created_chunks = chunk_csv_stream(
+                document_id=document.id,
+                rows_iter=rows_iter,
+                max_tokens=1200,
+                overlap_rows=5,
+                section_title="CSV",
+            )
+
+            if created_chunks == 0:
                 document.file_status = "parsed_empty"
                 db.commit()
                 return
 
-            chunk_csv_rows(document_id=document.id, rows=rows)
+            # Upsert chunks to Chroma
             upsert_chunks_to_vectorstore(db, document.id)
 
             # Blocks
+            rows_for_blocks = []
+            for i, row in enumerate(iter_csv_rows(document.storage_path)):
+                rows_for_blocks.append(row)
+                if i >= 3000:  # safety cap for huge CSVs
+                    break
+
             create_blocks_from_csv_rows(
                 db=db,
                 document_id=document.id,
-                rows=rows,
+                rows=rows_for_blocks,
             )
 
+        # ---------------- TXT ----------------
         elif document.file_type in ("text/plain", "text/markdown"):
             full_text = parse_txt(document.storage_path)
 
@@ -125,6 +149,7 @@ async def process_document_logic(document_id: int):
             )
             logger.info(f"Block creation completed for document ID {document.id}")
 
+        # ---------------- DOCX ----------------
         elif document.file_type in (
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         ):
@@ -155,6 +180,7 @@ async def process_document_logic(document_id: int):
             )
             logger.info(f"Block creation completed for document ID {document.id}")
 
+        # ---------------- PDF ----------------
         else:
             # Chunk PDF with Docling + HybridChunker
             parse_id, total_chunks = chunk_pdf(

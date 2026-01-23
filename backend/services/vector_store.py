@@ -21,13 +21,16 @@ chroma_client = chromadb.PersistentClient(
 collection = chroma_client.get_or_create_collection(name=COLLECTION_NAME)
 
 
-def upsert_document_chunks(document_id: int, chunks: List[Dict]):
+def upsert_document_chunks(document_id: int, chunks: List[Dict], batch_size: int = 2000):
     """
+    Upsert chunks into Chroma in safe batches.
+    Chroma has an internal max batch size, so split the writes.
     chunks: list of dicts like:
       {
         "id": <chunk_db_id or unique id>,
         "text": "...",
-        "metadata": { ... }
+        "metadata": { ... },
+        "keywords": [...]
       }
     """
     if not chunks:
@@ -43,12 +46,15 @@ def upsert_document_chunks(document_id: int, chunks: List[Dict]):
 
     embeddings = provider_embed_texts(texts)
 
-    collection.upsert(
-        ids=ids,
-        documents=texts,
-        metadatas=metadatas,
-        embeddings=embeddings,
-    )
+    # Upsert in batches for Chroma stability
+    for start in range(0, len(ids), batch_size):
+        end = start + batch_size
+        collection.upsert(
+            ids=ids[start:end],
+            documents=texts[start:end],
+            metadatas=metadatas[start:end],
+            embeddings=embeddings[start:end],
+        )
 
 
 def query_similar_chunks(document_id: int, query: str, k: int = 5) -> List[Dict]:
