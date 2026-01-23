@@ -4,7 +4,7 @@ from typing import List, Dict
 import chromadb
 from chromadb.config import Settings
 
-from backend.services.llm_provider import embed_texts as provider_embed_texts
+from backend.services.llm.llm_provider import embed_texts as provider_embed_texts
 
 load_dotenv()
 

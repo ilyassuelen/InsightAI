@@ -12,17 +12,17 @@ from backend.parsers.csv_parser import iter_csv_rows
 from backend.parsers.txt_parser import parse_txt
 from backend.parsers.docx_parser import parse_docx
 
-from backend.services.chunking_service import (
+from backend.services.ingestion.chunking_service import (
     chunk_text_from_text,
     chunk_csv_stream,
     chunk_pdf,
     MAX_TOKENS
 )
-from backend.services.document_block_service import create_blocks_from_chunks
-from backend.services.structured_block_service import structure_blocks
-from backend.services.report_service import generate_report_for_document
-from backend.services.csv_block_service import create_blocks_from_csv_rows
-from backend.services.vector_store import upsert_document_chunks, delete_document_chunks
+from backend.services.ingestion.document_block_service import create_blocks_from_chunks
+from backend.services.ingestion.structured_block_service import structure_blocks
+from backend.services.reporting.report_service import generate_report_for_document
+from backend.services.ingestion.csv_block_service import create_blocks_from_csv_rows
+from backend.services.vector.vector_store import upsert_document_chunks, delete_document_chunks
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

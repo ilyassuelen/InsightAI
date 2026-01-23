@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from backend.services.structured_block_service import get_structured_blocks
+from backend.services.ingestion.structured_block_service import get_structured_blocks
 from openai import OpenAI
 import asyncio
 

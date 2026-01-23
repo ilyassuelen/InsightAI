@@ -3,11 +3,11 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from backend.services.llm_provider import generate_json
+from backend.services.llm.llm_provider import generate_json
 from backend.models.document import Document
 from backend.models.document_block import DocumentBlock
-from backend.services.vector_store import query_similar_chunks
-from backend.services.report_schema import ReportModel, ReportSection, KeyFigure
+from backend.services.vector.vector_store import query_similar_chunks
+from backend.services.reporting.report_schema import ReportModel, ReportSection, KeyFigure
 
 logger = logging.getLogger(__name__)
 

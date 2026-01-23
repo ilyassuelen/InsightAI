@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Optional
 from openai import OpenAI
 from openai import RateLimitError, APIConnectionError, APIError
 
-from backend.services.gemini_client import generate_json as gemini_generate_json
-from backend.services.gemini_client import embed_texts as gemini_embed_texts
+from backend.services.llm.gemini_client import generate_json as gemini_generate_json
+from backend.services.llm.gemini_client import embed_texts as gemini_embed_texts
 
 logger = logging.getLogger(__name__)
 

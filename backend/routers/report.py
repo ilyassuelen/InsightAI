@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from backend.database.database import SessionLocal
-from backend.services.report_service import generate_report_for_document
+from backend.services.reporting.report_service import generate_report_for_document
 from backend.models.report import Report
 
 router = APIRouter()

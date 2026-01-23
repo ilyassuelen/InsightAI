@@ -4,7 +4,7 @@ from typing import List, Dict, Optional
 
 from backend.database.database import SessionLocal
 from backend.models.document_block import DocumentBlock
-from backend.services.llm_provider import generate_json
+from backend.services.llm.llm_provider import generate_json
 
 logger = logging.getLogger(__name__)
 
