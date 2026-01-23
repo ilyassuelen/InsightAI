@@ -1,10 +1,18 @@
 ![InsightAI Logo](frontend/public/logo.png)
 
-![License: MIT](https://img.shields.io/badge/license-MIT-brightgreen) ![Python ≥3.10](https://img.shields.io/badge/python-%3E%3D3.10-blue) ![Node ≥18](https://img.shields.io/badge/node-%3E%3D18-green)
+![License: MIT](https://img.shields.io/badge/license-MIT-brightgreen)
+![Python ≥3.10](https://img.shields.io/badge/python-%3E%3D3.10-blue)
+![Node ≥18](https://img.shields.io/badge/node-%3E%3D18-green)
+![AI: OpenAI + Gemini](https://img.shields.io/badge/AI-OpenAI%20%2B%20Gemini-purple)
 
-**InsightAI** is a modern web application designed to help users extract insights from their documents efficiently. Users can upload PDFs, CSVs, DOCX, TXT-files or connect to API data. The integrated AI analyzes the content, generates professional reports, and now includes the **first version of a document-aware chat feature**.
+---
 
-> **Note:** Currently, the application is fully optimized for **PDF, CSV, DOCX and TXT documents**. API-connected data is a planned feature.
+**InsightAI** is a modern, document-centric AI application designed to extract structured insights from unstructured data at scale.
+
+Users can upload **PDF, CSV, DOCX, and TXT files**, which are then parsed, chunked, embedded, and analyzed using a **Retrieval-Augmented Generation (RAG)** pipeline. The system generates professional AI reports and enables a **document-aware chat experience**.
+
+> **Status:** Fully optimized for **PDF, CSV, DOCX, and TXT** documents.  
+> API-connected data sources and multi-user workspaces are planned features.
 
 ---
 
@@ -40,11 +48,22 @@ This view shows a partial preview of an AI-generated report, demonstrating how e
 
 ---
 
-## ⚡ Features
+## ⚡ Key Features
 
-- **Document Upload:** Supports PDFs, CSVs, DOCXs and TXTs. 
-- **AI-Powered Analysis:** Automatically generates structured reports, summaries, and insights using OpenAI LLMs.  
-- **Interactive Chat:** Ask questions about your documents directly in the chat (first version now available).
+- **Document Upload:** Supports PDFs, CSVs, DOCXs and TXTs.
+- **Scalable CSV Processing**  
+  Memory-safe streaming & token-aware chunking.  
+  Successfully tested with **25,000+ row CSV files**.
+- **RAG-Based AI Reports**  
+  Structured summaries, key figures, findings, risks, and conclusions generated strictly from document evidence.
+- **Interactive Chat:** Ask questions about your documents directly in the chat (first version available).
+- **OpenAI + Gemini Fallback**  
+  Automatic fallback to **Google Gemini** when OpenAI hits:
+  - 429 rate limits  
+  - token limits  
+  - temporary API failures
+- **Robust Processing Pipeline**  
+  Chunking, embedding, vector storage, block structuring, and reporting are fully decoupled.
 - **Responsive UI:** Optimized for desktop and mobile devices.  
 
 ---
@@ -74,45 +93,46 @@ source .venv/bin/activate
 .\.venv\Scripts\Activate.ps1
 
 pip install -r requirements.txt
-uvicorn main:app --reload
+uvicorn backend.main:app --reload
 
 # Frontend setup
 cd ../frontend
 npm install
-npm start
+npm run dev
 ```
 
 ## ⚙️ Configuration
 
-The app uses environment variables for configuration. Create a `.env` file in the **project root**:
+Create a `.env` file in the **project root**:
 
-| Name             | Required | Description                                      |
-| ---------------- | -------- | ------------------------------------------------ |
-| OPENAI_API_KEY   | ✅       | OpenAI API key for AI report generation         |
-| DATABASE_URL     | ❌       | Optional DB URL for PostgreSQL (defaults to SQLite) |
+| Name             | Required | Description                                         |
+| ---------------- | ------- |-----------------------------------------------------|
+| OPENAI_API_KEY   | ✅      | OpenAI API key for AI report generation             |
+| GEMINI_API_KEY   | ❌       | Optional Gemini API key (automatic fallback)        |
+| DATABASE_URL     | ❌      | Optional DB URL for PostgreSQL (defaults to SQLite) |
 
 
 ## Usage
 
-1. Open the frontend in your browser at [http://localhost:8080](http://localhost:8080).  
-2. Upload a Document via the Upload Zone.  
-3. Wait for AI processing (status shown in sidebar).  
-4. Click on the document to view the generated report.  
-5. Use the chat panel to ask specific questions about the document content (first version available).  
-
-(API-connected documents are not supported yet)
+1. Open the frontend in your browser at [http://localhost:8080](http://localhost:8080).
+2. Start the Agent
+3. Upload a Document via the Upload Zone.  
+4. Wait for AI processing (status shown in sidebar).  
+5. Click on the document to view the generated report.  
+6. Use the chat panel to ask specific questions about the document.
 
 ## Tech Stack
 - Frontend: React, TypeScript, Tailwind CSS, Framer Motion
 - Backend: Python, FastAPI, Pydantic
-- AI: OpenAI API (LLM for report generation and chat)
-- Database: SQLite / PostgreSQL (configurable)
+- AI: OpenAI API (primary LLM), Google Gemini (automatic fallback), Retrieval-Augmented Generation (RAG)
+- Vector Storage: ChromaDB (current), Qdrant (planned replacement)
+- Database: SQLite (default) / PostgreSQL (configurable)
 - State Management: React Hooks & Context
 
 ## Roadmap (Planned Features)
-- Enhanced CSV support for very large files
 - API-connected data ingestion
-- Enhanced reporting options and visualizations
+- Advanced analytics & visualizations
+- Vector DB migration to Qdrant
 
 ## 🤝 Contributing
 Contributions are welcome! Please follow these steps:
