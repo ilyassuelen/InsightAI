@@ -85,18 +85,29 @@ def generate_json(
 # ------------------------
 def embed_texts(texts: List[str]) -> List[List[float]]:
     """
-    OpenAI embeddings first, Gemini fallback.
+    OpenAI embeddings only.
+    Retry with backoff on transient errors.
     """
     batch_size = 64
     out: List[List[float]] = []
     for i in range(0, len(texts), batch_size):
         batch = texts[i:i + batch_size]
-        try:
-            response = openai_client.embeddings.create(
-                model="text-embedding-3-small",
-                input=batch,
-            )
-            out.extend([item.embedding for item in response.data])
-        except (RateLimitError, APIConnectionError, APIError):
-            out.extend(gemini_embed_texts(model="gemini-embedding-001", texts=batch))
+
+        retries = 3
+        delay = 1.0
+
+        for attempt in range(retries):
+            try:
+                response = openai_client.embeddings.create(
+                    model="text-embedding-3-small",
+                    input=batch,
+                )
+                out.extend([item.embedding for item in response.data])
+                break
+            except (RateLimitError, APIConnectionError, APIError) as e:
+                if attempt == retries - 1:
+                    raise
+                logger.warning(f"Embeddings failed ({type(e).__name__}), retrying in {delay:.1f}s")
+                time.sleep(delay)
+                delay *= 2
     return out

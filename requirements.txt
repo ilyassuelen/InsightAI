@@ -8,5 +8,5 @@ python-multipart
 docling
 tiktoken
 python-docx
-chromadb
+qdrant-client
 google-genai

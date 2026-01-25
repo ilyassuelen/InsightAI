@@ -1,84 +1,153 @@
 import os
-from dotenv import load_dotenv
-from typing import List, Dict
-import chromadb
-from chromadb.config import Settings
+import uuid
+import logging
+from typing import List, Dict, Any
 
-from backend.services.llm.llm_provider import embed_texts as provider_embed_texts
+from qdrant_client import QdrantClient
+from qdrant_client.http import models as qmodels
 
-load_dotenv()
+# Keep embeddings consistent OpenAI only (no Gemini embedding fallback)
+from backend.services.llm.llm_provider import embed_texts as embed_texts_openai
 
-# Persist locally (Create folder)
-CHROMA_DIR = "backend/storage/chroma"
-COLLECTION_NAME = "insightai_chunks"
+logger = logging.getLogger(__name__)
 
-os.makedirs(CHROMA_DIR, exist_ok=True)
+QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
+COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "insightai_chunks")
 
-chroma_client = chromadb.PersistentClient(
-    path=CHROMA_DIR,
-    settings=Settings(anonymized_telemetry=False),
-)
-collection = chroma_client.get_or_create_collection(name=COLLECTION_NAME)
+client = QdrantClient(url=QDRANT_URL)
+
+# Cache: If the collection exists, stop calling get_collections()
+_COLLECTION_READY = False
 
 
-def upsert_document_chunks(document_id: int, chunks: List[Dict], batch_size: int = 2000):
+def ensure_collection(vector_size: int):
     """
-    Upsert chunks into Chroma in safe batches.
-    Chroma has an internal max batch size, so split the writes.
-    chunks: list of dicts like:
-      {
-        "id": <chunk_db_id or unique id>,
-        "text": "...",
-        "metadata": { ... },
-        "keywords": [...]
-      }
+    Ensure the Qdrant collection exists.
+    Uses a cached flag to avoid repeated GET /collections calls.
     """
+    global _COLLECTION_READY
+    if _COLLECTION_READY:
+        return
+
+    existing = [c.name for c in client.get_collections().collections]
+    if COLLECTION_NAME in existing:
+        _COLLECTION_READY = True
+        return
+
+    client.create_collection(
+        collection_name=COLLECTION_NAME,
+        vectors_config=qmodels.VectorParams(
+            size=vector_size,
+            distance=qmodels.Distance.COSINE,
+        ),
+    )
+    _COLLECTION_READY = True
+
+
+def upsert_document_chunks(document_id: int, chunks: List[Dict], batch_size: int = 512):
     if not chunks:
         return
 
-    ids = [f"doc{document_id}_chunk{c['id']}" for c in chunks]
+    ids = [
+        str(uuid.uuid5(uuid.NAMESPACE_URL, f"doc{document_id}_chunk{c['id']}"))
+        for c in chunks
+    ]
     texts = [c["text"] for c in chunks]
-    metadatas = [{
-        **c.get("metadata", {}),
-        "document_id": document_id,
-        "keywords": ", ".join(c["keywords"]) if "keywords" in c else ""
-    } for c in chunks]
 
-    embeddings = provider_embed_texts(texts)
+    vectors = embed_texts_openai(texts)
+    if not vectors or not vectors[0]:
+        return
 
-    # Upsert in batches for Chroma stability
+    ensure_collection(vector_size=len(vectors[0]))
+
+    payloads: List[Dict[str, Any]] = []
+    for c in chunks:
+        md = c.get("metadata") or {}
+        payloads.append(
+            {
+                "document_id": document_id,
+                "chunk_db_id": c["id"],
+                "_text": c["text"],
+                "chunk_index": md.get("chunk_index"),
+                "page_start": md.get("page_start"),
+                "page_end": md.get("page_end"),
+                "section_title": md.get("section_title"),
+                "keywords": c.get("keywords", []),
+            }
+        )
+
     for start in range(0, len(ids), batch_size):
         end = start + batch_size
-        collection.upsert(
-            ids=ids[start:end],
-            documents=texts[start:end],
-            metadatas=metadatas[start:end],
-            embeddings=embeddings[start:end],
+        client.upsert(
+            collection_name=COLLECTION_NAME,
+            points=qmodels.Batch(
+                ids=ids[start:end],
+                vectors=vectors[start:end],
+                payloads=payloads[start:end],
+            ),
         )
 
 
 def query_similar_chunks(document_id: int, query: str, k: int = 5) -> List[Dict]:
     """Return top-k chunks (text + metadata) for a document_id."""
-    q_emb = provider_embed_texts([query])[0]
+    q_vec = embed_texts_openai([query])[0]
+    if not q_vec:
+        return []
 
-    response = collection.query(
-        query_embeddings=[q_emb],
-        n_results=k,
-        where={"document_id": document_id},
-        include=["documents", "metadatas", "distances"],
+    if not _COLLECTION_READY:
+        return []
+
+    flt = qmodels.Filter(
+        must=[
+            qmodels.FieldCondition(
+                key="document_id",
+                match=qmodels.MatchValue(value=document_id),
+            )
+        ]
     )
 
+    # Qdrant-Client 1.16.x uses query_points()
+    results = client.query_points(
+        collection_name=COLLECTION_NAME,
+        query=q_vec,
+        limit=k,
+        query_filter=flt,
+        with_payload=True,
+    )
+
+    points = getattr(results, "points", [])
+
     hits = []
-    for i in range(len(response["ids"][0])):
-        hits.append({
-            "id": response["ids"][0][i],
-            "text": response["documents"][0][i],
-            "metadata": response["metadatas"][0][i],
-            "distance": response["distances"][0][i],
-        })
+    for p in points:
+        payload = getattr(p, "payload", None) or {}
+        hits.append(
+            {
+                "id": getattr(p, "id", None),
+                "text": payload.get("_text", ""),
+                "metadata": {
+                    "chunk_index": payload.get("chunk_index"),
+                    "page_start": payload.get("page_start"),
+                    "page_end": payload.get("page_end"),
+                    "section_title": payload.get("section_title"),
+                },
+                "distance": getattr(p, "score", None),
+            }
+        )
     return hits
 
 
 def delete_document_chunks(document_id: int):
-    """Delete all chunks for a document."""
-    collection.delete(where={"document_id": document_id})
+    if not _COLLECTION_READY:
+        return
+
+    client.delete(
+        collection_name=COLLECTION_NAME,
+        points_selector=qmodels.Filter(
+            must=[
+                qmodels.FieldCondition(
+                    key="document_id",
+                    match=qmodels.MatchValue(value=document_id),
+                )
+            ]
+        ),
+    )

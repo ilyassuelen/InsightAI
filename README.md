@@ -9,7 +9,7 @@
 
 **InsightAI** is a modern, document-centric AI application designed to extract structured insights from unstructured data at scale.
 
-Users can upload **PDF, CSV, DOCX, and TXT files**, which are then parsed, chunked, embedded, and analyzed using a **Retrieval-Augmented Generation (RAG)** pipeline. The system generates professional AI reports and enables a **document-aware chat experience**.
+Users can upload **PDF, CSV, DOCX, and TXT files**, which are then parsed, chunked, embedded, and analyzed using a **Retrieval-Augmented Generation (RAG)** pipeline backed by a **Qdrant vector database**. The system generates professional AI reports and enables a **document-aware chat experience**.
 
 > **Status:** Fully optimized for **PDF, CSV, DOCX, and TXT** documents.  
 > API-connected data sources and multi-user workspaces are planned features.
@@ -63,7 +63,7 @@ This view shows a partial preview of an AI-generated report, demonstrating how e
   - token limits  
   - temporary API failures
 - **Robust Processing Pipeline**  
-  Chunking, embedding, vector storage, block structuring, and reporting are fully decoupled.
+  Chunking, embedding, **Qdrant-based vector storage**, block structuring, and reporting are fully decoupled.
 - **Responsive UI:** Optimized for desktop and mobile devices.  
 
 ---
@@ -82,7 +82,20 @@ This view shows a partial preview of an AI-generated report, demonstrating how e
 # Clone the repository
 git clone https://github.com/ilyassuelen/InsightAI
 cd InsightAI
+```
 
+#### Vector Database (Qdrant)
+InsightAI uses **Qdrant** as its vector database for embeddings and retrieval.
+
+Make sure Docker is running, then start Qdrant locally:
+
+```bash
+docker run -p 6333:6333 -p 6334:6334 \
+  -v $(pwd)/backend/storage/qdrant_storage:/qdrant/storage \
+  qdrant/qdrant
+```
+
+```bash
 # Backend setup
 cd backend
 python -m venv .venv
@@ -105,11 +118,13 @@ npm run dev
 
 Create a `.env` file in the **project root**:
 
-| Name             | Required | Description                                         |
-| ---------------- | ------- |-----------------------------------------------------|
-| OPENAI_API_KEY   | ✅      | OpenAI API key for AI report generation             |
-| GEMINI_API_KEY   | ❌       | Optional Gemini API key (automatic fallback)        |
-| DATABASE_URL     | ❌      | Optional DB URL for PostgreSQL (defaults to SQLite) |
+| Name              | Required | Description                                                         |
+|-------------------|----------|---------------------------------------------------------------------|
+| OPENAI_API_KEY    | ✅        | OpenAI API key for AI report generation                             |
+| GEMINI_API_KEY    | ❌        | Optional Gemini API key (automatic fallback)                        |
+| QDRANT_URL        | ✅        | URL of the Qdrant vector database (default: http://localhost:6333)  |
+| QDRANT_COLLECTION | ❌        | Qdrant collection name (default: insightai_chunks)                  |
+| DATABASE_URL      | ❌        | Optional DB URL for PostgreSQL (defaults to SQLite)                 |
 
 
 ## Usage
@@ -125,14 +140,15 @@ Create a `.env` file in the **project root**:
 - Frontend: React, TypeScript, Tailwind CSS, Framer Motion
 - Backend: Python, FastAPI, Pydantic
 - AI: OpenAI API (primary LLM), Google Gemini (automatic fallback), Retrieval-Augmented Generation (RAG)
-- Vector Storage: ChromaDB (current), Qdrant (planned replacement)
+- Vector Storage: **Qdrant**
 - Database: SQLite (default) / PostgreSQL (configurable)
 - State Management: React Hooks & Context
 
 ## Roadmap (Planned Features)
 - API-connected data ingestion
 - Advanced analytics & visualizations
-- Vector DB migration to Qdrant
+- Team-based workspaces (shared documents & reports)
+- Language-aware report generation (DE / EN)
 
 ## 🤝 Contributing
 Contributions are welcome! Please follow these steps:
