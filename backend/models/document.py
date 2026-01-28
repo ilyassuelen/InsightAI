@@ -11,6 +11,7 @@ class Document(Base):
     file_type = Column(String, nullable=False)
     storage_path = Column(String, nullable=False)
     file_status = Column(String, nullable=False)
+    language = Column(String, nullable=False, default="de")
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
 
     parses = relationship("DocumentParse", back_populates="document", cascade="all, delete-orphan")

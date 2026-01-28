@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Send, MessageSquare, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getReportChatLanguage } from "@/lib/language";
 
 interface ChatPreviewProps {
   documentId?: string;
@@ -40,6 +41,7 @@ export function ChatPreview({ documentId }: ChatPreviewProps) {
         body: JSON.stringify({
           document_id: Number(documentId),
           message: userMessage.content,
+          language: getReportChatLanguage(),
         }),
       });
 

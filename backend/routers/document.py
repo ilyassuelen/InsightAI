@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, HTTPException, Body, BackgroundTasks
+from fastapi import APIRouter, UploadFile, HTTPException, Body, BackgroundTasks, File, Form
 from pathlib import Path
 from uuid import uuid4
 import logging
@@ -104,7 +104,7 @@ async def process_document_logic(document_id: int):
                 db.commit()
                 return
 
-            # Upsert chunks to Chroma
+            # Upsert chunks to qdrant
             upsert_chunks_to_vectorstore(db, document.id)
 
             # Blocks
@@ -139,7 +139,7 @@ async def process_document_logic(document_id: int):
             )
             logger.info(f"Chunking completed for document ID {document.id}")
 
-            # Upsert chunks to Chroma
+            # Upsert chunks to qdrant
             upsert_chunks_to_vectorstore(db, document.id)
 
             # Blocks
@@ -170,7 +170,7 @@ async def process_document_logic(document_id: int):
             )
             logger.info(f"Chunking completed for document ID {document.id}")
 
-            # Upsert chunks to Chroma
+            # Upsert chunks to qdrant
             upsert_chunks_to_vectorstore(db, document.id)
 
             # Blocks
@@ -188,7 +188,7 @@ async def process_document_logic(document_id: int):
                 pdf_path=document.storage_path,
             )
 
-            # Upsert chunks to Chroma
+            # Upsert chunks to qdrant
             upsert_chunks_to_vectorstore(db, document.id)
             logger.info(f"Chunking completed for document ID {document.id} ({total_chunks} chunks)")
 
@@ -243,6 +243,7 @@ def get_documents():
                 "file_type": document.file_type,
                 "storage_path": document.storage_path,
                 "file_status": document.file_status,
+                "language": document.language,
                 "created_at": document.created_at
             }
             for document in documents
@@ -259,7 +260,11 @@ def get_documents():
 
 
 @router.post("/upload")
-async def upload_document(file: UploadFile, background_tasks: BackgroundTasks):
+async def upload_document(
+    file: UploadFile = File(...),
+    background_tasks: BackgroundTasks = None,
+    language: str = Form("de"),
+):
     storage_dir = Path("backend/storage/documents")
     storage_dir.mkdir(parents=True, exist_ok=True)
 
@@ -275,7 +280,8 @@ async def upload_document(file: UploadFile, background_tasks: BackgroundTasks):
             filename=file.filename,
             file_type=file.content_type,
             storage_path=str(filepath),
-            file_status="uploaded"
+            file_status="uploaded",
+            language=(language or "de").strip()
         )
 
         db.add(document)
@@ -288,7 +294,8 @@ async def upload_document(file: UploadFile, background_tasks: BackgroundTasks):
         return {
             "message": "Document uploaded successfully and processing started",
             "document_id": document.id,
-            "status": document.file_status
+            "status": document.file_status,
+            "language": document.language
         }
 
     except Exception as e:
@@ -325,6 +332,7 @@ def get_document(id: int):
             "file_type": document.file_type,
             "storage_path": document.storage_path,
             "file_status": document.file_status,
+            "language": document.language,
             "created_at": document.created_at
         }
     finally:
@@ -358,6 +366,7 @@ def update_document(id: int, filename: str | None = Body(default=None), file_sta
                 "file_type": document.file_type,
                 "storage_path": document.storage_path,
                 "file_status": document.file_status,
+                "language": document.language,
                 "created_at": document.created_at
             }
         }
@@ -390,7 +399,6 @@ def delete_document(id: int):
         db.delete(document)
         db.commit()
 
-        # Delete from Chroma as well
         delete_document_chunks(id)
 
         return {"message": f"Document with ID: {id} deleted successfully"}

@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Menu, Sparkles, LogOut } from "lucide-react";
+import { LanguageSelector } from './LanguageSelector';
 
 interface HeaderProps {
   onToggleSidebar?: () => void;
@@ -38,8 +39,12 @@ export function Header({
           </motion.div>
         </div>
 
-        {/* Right */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4">
+          {/* Language selector */}
+          <div className="relative">
+            <LanguageSelector />
+          </div>
+
           {/* Status indicator */}
           <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-success/10 border border-success/20">
             <Sparkles className="h-3.5 w-3.5 text-success" />

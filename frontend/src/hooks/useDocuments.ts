@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Document, DocumentStatus } from '@/types/document';
 import type { Report } from '@/types/report';
+import { getReportChatLanguage } from '@/lib/language';
 
 const API_BASE = 'http://localhost:8000';
 
@@ -48,6 +49,8 @@ export function useDocuments() {
     try {
       const formData = new FormData();
       formData.append('file', file);
+
+      formData.append('language', getReportChatLanguage());
 
       const response = await fetch(`${API_BASE}/documents/upload`, {
         method: 'POST',

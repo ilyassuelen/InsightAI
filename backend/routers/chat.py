@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from backend.services.chat.chat_service import generate_chat_response
@@ -7,6 +8,7 @@ router = APIRouter()
 class ChatRequest(BaseModel):
     document_id: int
     message: str
+    language: Optional[str] = None
 
 class ChatResponse(BaseModel):
     answer: str
@@ -27,7 +29,7 @@ async def create_chat(request: ChatRequest):
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     try:
-        answer = await generate_chat_response(request.document_id, request.message)
+        answer = await generate_chat_response(request.document_id, request.message, request.language)
         return ChatResponse(answer=answer)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate chat response: {e}")

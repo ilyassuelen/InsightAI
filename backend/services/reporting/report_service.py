@@ -11,6 +11,27 @@ from backend.services.reporting.report_schema import ReportModel, ReportSection,
 
 logger = logging.getLogger(__name__)
 
+# -------- HELPER FUNCTION FOR LANGUAGE --------
+def language_instruction(lang: str) -> str:
+    lang = (lang or "de").strip()
+    low = lang.lower()
+    if low in ("de", "german", "deutsch"):
+        return (
+            "Output language: German (de). "
+            "IMPORTANT: Write the entire output strictly in German. "
+            "Do not use English words for headings or labels."
+        )
+    if low in ("en", "english"):
+        return (
+            "Output language: English (en). "
+            "IMPORTANT: Write the entire output strictly in English."
+        )
+    return (
+        f"Output language: {lang}. "
+        f"IMPORTANT: Write the entire output strictly in {lang}. "
+        "Do not mix languages."
+    )
+
 REPORT_SECTIONS = [
     ("Executive Summary", "High-level overview of the document and its purpose."),
     ("Key Findings", "Most important insights, takeaways, patterns or decisions."),
@@ -159,16 +180,21 @@ def generate_report_for_document(db: Session, document_id: int) -> Dict[str, Any
     if not document:
         raise ValueError(f"Document {document_id} not found")
 
-    logger.info(f"Generating report (section-by-section) for document {document_id}")
+    lang = document.language or "de"
+    lang_rule = language_instruction(lang)
+
+    system_section = f"{SYSTEM_SECTION}\n\n{lang_rule}"
+    system_keyfig = f"{SYSTEM_KEYFIGURES}\n\n{lang_rule}"
+    system_final = f"{SYSTEM_FINAL}\n\n{lang_rule}"
+
+    logger.info(f"Generating report (section-by-section) for document {document_id} (lang={lang})")
 
     sections: List[ReportSection] = []
     key_figures: List[KeyFigure] = []
 
     for heading, instruction in REPORT_SECTIONS:
-        # 1) Evidence from Chroma (RAG)
         hits = query_similar_chunks(document_id=document_id, query=f"{heading}. {instruction}", k=8)
 
-        # 2) Fallback: if Chroma is empty, use DB blocks
         if not hits:
             blocks = (
                 db.query(DocumentBlock)
@@ -223,7 +249,7 @@ Evidence (use only this):
         if heading == "Key Figures":
             data = generate_json(
                 model="gpt-4o-mini",
-                system_prompt=SYSTEM_KEYFIGURES,
+                system_prompt=system_keyfig,
                 user_prompt=user_prompt,
                 temperature=0.2,
             )
@@ -258,7 +284,7 @@ Evidence (use only this):
         else:
             section_dict = generate_json(
                 model="gpt-4o-mini",
-                system_prompt=SYSTEM_SECTION,
+                system_prompt=system_section,
                 user_prompt=user_prompt,
                 temperature=0.2,
             )
@@ -281,7 +307,7 @@ Evidence (use only this):
 
     final_json = generate_json(
         model="gpt-4o-mini",
-        system_prompt=SYSTEM_FINAL,
+        system_prompt=system_final,
         user_prompt=f"Drafted sections:\n\n{assembled}",
         temperature=0.2,
     )
