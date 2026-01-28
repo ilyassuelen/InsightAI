@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Globe } from 'lucide-react';
 import {
   Select,
@@ -17,6 +17,12 @@ export function LanguageSelector() {
   const [selectedOption, setSelectedOption] = useState<LanguageOption>('de');
   const [customLanguage, setCustomLanguage] = useState('');
 
+  // ✅ separate states
+  const [selectOpen, setSelectOpen] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
+
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === 'en') {
@@ -29,14 +35,33 @@ export function LanguageSelector() {
     }
   }, []);
 
+  // When custom popup opens, focus the input
+  useEffect(() => {
+    if (customOpen) {
+      // next tick to ensure it's mounted
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [customOpen]);
+
   const handleOptionChange = (value: LanguageOption) => {
     setSelectedOption(value);
+
     if (value === 'en') {
       localStorage.setItem(STORAGE_KEY, 'en');
-    } else if (value === 'de') {
-      localStorage.setItem(STORAGE_KEY, 'de');
+      setSelectOpen(false);
+      setCustomOpen(false);
+      return;
     }
-    // For 'other', we save when the input changes
+
+    if (value === 'de') {
+      localStorage.setItem(STORAGE_KEY, 'de');
+      setSelectOpen(false);
+      setCustomOpen(false);
+      return;
+    }
+
+    setSelectOpen(false);
+    setCustomOpen(true);
   };
 
   const handleCustomLanguageChange = (value: string) => {
@@ -47,15 +72,27 @@ export function LanguageSelector() {
     }
   };
 
+  const commitAndCloseCustom = () => {
+    const trimmed = customLanguage.trim();
+    if (trimmed) {
+      localStorage.setItem(STORAGE_KEY, trimmed);
+    }
+    setCustomOpen(false);
+  };
+
   return (
     <div className="flex items-center gap-2">
       <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
         <Globe className="h-3.5 w-3.5" />
         <span className="hidden md:inline">Report & Chat</span>
       </div>
-      
-      <div className="flex flex-col gap-1">
-        <Select value={selectedOption} onValueChange={handleOptionChange}>
+      <div className="flex flex-col gap-1 relative">
+        <Select
+          value={selectedOption}
+          onValueChange={handleOptionChange}
+          open={selectOpen}
+          onOpenChange={setSelectOpen}
+        >
           <SelectTrigger className="h-8 w-[100px] sm:w-[120px] text-xs bg-muted/50 border-border">
             <SelectValue />
           </SelectTrigger>
@@ -65,17 +102,27 @@ export function LanguageSelector() {
             <SelectItem value="other" className="text-xs">Other…</SelectItem>
           </SelectContent>
         </Select>
-        
-        {selectedOption === 'other' && (
+        {selectedOption === 'other' && customOpen && (
           <div className="absolute top-full right-0 mt-1 z-50 flex flex-col gap-1 p-2 rounded-lg bg-background border border-border shadow-lg min-w-[200px]">
             <Input
+              ref={inputRef}
               value={customLanguage}
               onChange={(e) => handleCustomLanguageChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitAndCloseCustom();
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setCustomOpen(false);
+                }
+              }}
               placeholder="e.g., Spanish, Hindi"
               className="h-8 text-xs bg-muted/50 border-border"
             />
             <span className="text-[10px] text-muted-foreground">
-              AI outputs will be generated in this language.
+              Press Enter to apply.
             </span>
           </div>
         )}
