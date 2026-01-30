@@ -2,8 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Document, DocumentStatus } from '@/types/document';
 import type { Report } from '@/types/report';
 import { getReportChatLanguage } from '@/lib/language';
-
-const API_BASE = 'http://localhost:8000';
+import { apiFetch } from '@/lib/api';
 
 /**
  * Normalizes arbitrary AI / backend content
@@ -30,6 +29,71 @@ export function useDocuments() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Reset everything (use on logout / login switch)
+  const resetState = useCallback(() => {
+    setDocuments([]);
+    setSelectedDocument(null);
+    setReport(null);
+    setIsLoading(false);
+    setError(null);
+  }, []);
+
+  // Refresh documents for current token/user
+  const refreshDocuments = useCallback(async () => {
+    try {
+      const response = await apiFetch(`/documents`);
+      if (!response.ok) throw new Error('Failed to fetch documents');
+
+      const docs = await response.json();
+
+      const mappedDocs: Document[] = docs.map((d: any) => ({
+        id: d.id,
+        client_id: d.client_id ?? String(d.id),
+        filename: d.filename,
+        file_status: d.file_status as DocumentStatus,
+        created_at: d.created_at,
+        size: d.size,
+      }));
+
+      setDocuments(mappedDocs);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch documents');
+    }
+  }, []);
+
+  const pollDocumentStatus = useCallback((documentId: number) => {
+    const interval = 3000;
+    const timeout = 5 * 60 * 1000;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await apiFetch(`/documents/${documentId}`);
+        if (!response.ok) return;
+
+        const d = await response.json();
+
+        const updatedDoc: Document = {
+          id: d.id,
+          client_id: d.client_id ?? String(d.id),
+          filename: d.filename,
+          file_status: d.file_status as DocumentStatus,
+          created_at: d.created_at,
+          size: d.size,
+        };
+
+        setDocuments(prev => prev.map(doc => (doc.id === documentId ? updatedDoc : doc)));
+
+        if (updatedDoc.file_status === 'completed') {
+          clearInterval(pollInterval);
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }, interval);
+
+    setTimeout(() => clearInterval(pollInterval), timeout);
+  }, []);
+
   // ---------------- Upload ----------------
   const uploadDocument = useCallback(async (file: File) => {
     const clientId = crypto.randomUUID();
@@ -49,10 +113,9 @@ export function useDocuments() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-
       formData.append('language', getReportChatLanguage());
 
-      const response = await fetch(`${API_BASE}/documents/upload`, {
+      const response = await apiFetch(`/documents/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -79,55 +142,19 @@ export function useDocuments() {
       );
       setError(err instanceof Error ? err.message : 'Upload failed');
     }
-  }, []);
-
-  // ---------------- Polling ----------------
-  const pollDocumentStatus = useCallback((documentId: number) => {
-    const interval = 3000;
-    const timeout = 5 * 60 * 1000;
-
-    const pollInterval = setInterval(async () => {
-      try {
-        const response = await fetch(`${API_BASE}/documents/${documentId}`);
-        if (!response.ok) return;
-
-        const d = await response.json();
-
-        const updatedDoc: Document = {
-          id: d.id,
-          client_id: d.client_id ?? String(d.id),
-          filename: d.filename,
-          file_status: d.file_status as DocumentStatus,
-          created_at: d.created_at,
-          size: d.size,
-        };
-
-        setDocuments(prev =>
-          prev.map(doc => (doc.id === documentId ? updatedDoc : doc))
-        );
-
-        if (updatedDoc.file_status === 'completed') {
-          clearInterval(pollInterval);
-        }
-      } catch {
-        // ignore polling errors
-      }
-    }, interval);
-
-    setTimeout(() => clearInterval(pollInterval), timeout);
-  }, []);
+  }, [pollDocumentStatus]);
 
   // ---------------- Select Document ----------------
-  const selectDocument = useCallback(async (document: Document) => {
+  const selectDocument = useCallback(async (document: Document | null) => {
     setSelectedDocument(document);
     setReport(null);
     setError(null);
 
-    if (document.file_status !== 'completed') return;
+    if (!document || document.file_status !== 'completed') return;
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/reports/${document.id}`);
+      const response = await apiFetch(`/reports/${document.id}`);
       if (!response.ok) throw new Error('Failed to fetch report');
 
       const data: Report = await response.json();
@@ -149,30 +176,8 @@ export function useDocuments() {
 
   // ---------------- Load all documents on mount ----------------
   useEffect(() => {
-    async function fetchDocuments() {
-      try {
-        const response = await fetch(`${API_BASE}/documents`);
-        if (!response.ok) throw new Error('Failed to fetch documents');
-
-        const docs = await response.json();
-
-        const mappedDocs: Document[] = docs.map((d: any) => ({
-          id: d.id,
-          client_id: d.client_id ?? String(d.id),
-          filename: d.filename,
-          file_status: d.file_status as DocumentStatus,
-          created_at: d.created_at,
-          size: d.size,
-        }));
-
-        setDocuments(mappedDocs);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch documents');
-      }
-    }
-
-    fetchDocuments();
-  }, []);
+      refreshDocuments();
+  }, [refreshDocuments]);
 
   return {
     documents,
@@ -183,5 +188,7 @@ export function useDocuments() {
     error,
     uploadDocument,
     selectDocument,
+    refreshDocuments,
+    resetState,
   };
 }

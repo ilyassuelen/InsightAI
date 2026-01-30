@@ -1,7 +1,14 @@
 from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
 from backend.services.chat.chat_service import generate_chat_response
+from backend.services.auth.deps import get_current_user
+from backend.database.database import SessionLocal
+from backend.models.user import User
+from backend.models.document import Document
+from backend.models.workspace_member import WorkspaceMember
 
 router = APIRouter()
 
@@ -13,44 +20,41 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
 
-@router.get("/")
-def get_chats():
-    """
-    Retrieve a list of all chat messages.
-    """
-    return {"message": "List all chats"}
+
+def user_has_access_to_document(db: Session, user_id: int, document: Document) -> bool:
+    return (
+        db.query(WorkspaceMember)
+        .filter(
+            WorkspaceMember.user_id == user_id,
+            WorkspaceMember.workspace_id == document.workspace_id,
+        )
+        .first()
+        is not None
+    )
+
 
 @router.post("/", response_model=ChatResponse)
-async def create_chat(request: ChatRequest):
+async def create_chat(request: ChatRequest, current_user: User = Depends(get_current_user)):
     """
     Send a new chat message and get a response.
     """
     if not request.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
+    db = SessionLocal()
+
+    try:
+        doc = db.query(Document).filter(Document.id == request.document_id).first()
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        if not user_has_access_to_document(db, current_user.id, doc):
+            raise HTTPException(status_code=403, detail="Forbidden")
+    finally:
+        db.close()
+
     try:
         answer = await generate_chat_response(request.document_id, request.message, request.language)
         return ChatResponse(answer=answer)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate chat response: {e}")
-
-@router.get("/{id}")
-def get_chat(id: int):
-    """
-    Retrieve a single chat message by its ID.
-    """
-    return {"message": f"Get chat message {id}"}
-
-@router.patch("/{id}")
-def update_chat(id: int):
-    """
-    Update chat message details for a given ID.
-    """
-    return {"message": f"Update chat message {id}"}
-
-@router.delete("/{id}")
-def delete_chat(id: int):
-    """
-    Delete a chat message by its ID.
-    """
-    return {"message": f"Delete chat message {id}"}

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, HTTPException, Body, BackgroundTasks, File, Form
+from fastapi import APIRouter, UploadFile, HTTPException, Body, BackgroundTasks, File, Form, Depends
 from pathlib import Path
 from uuid import uuid4
 import logging
@@ -24,8 +24,35 @@ from backend.services.reporting.report_service import generate_report_for_docume
 from backend.services.ingestion.csv_block_service import create_blocks_from_csv_rows
 from backend.services.vector.vector_store import upsert_document_chunks, delete_document_chunks
 
+from backend.services.auth.deps import get_current_user
+from backend.models.user import User
+from backend.services.workspaces.workspace_service import get_personal_workspace
+from backend.models.workspace_member import WorkspaceMember
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+# -------------------- ACCESS CONTROL --------------------
+def user_has_access_to_document(db, user_id: int, document: Document) -> bool:
+    return (
+        db.query(WorkspaceMember)
+        .filter(
+            WorkspaceMember.user_id == user_id,
+            WorkspaceMember.workspace_id == document.workspace_id,
+        )
+        .first()
+        is not None
+    )
+
+
+def user_workspace_ids(db, user_id: int) -> list[int]:
+    rows = (
+        db.query(WorkspaceMember.workspace_id)
+        .filter(WorkspaceMember.user_id == user_id)
+        .all()
+    )
+    return [wid for (wid,) in rows]
 
 
 # -------------------- HELPER FUNCTION --------------------
@@ -232,10 +259,16 @@ async def process_document_logic(document_id: int):
 
 # -------------------- ROUTES --------------------
 @router.get("/")
-def get_documents():
+def get_documents(current_user: User = Depends(get_current_user)):
     db = SessionLocal()
     try:
-        documents = db.query(Document).all()
+        # Workspaces where user is a member
+        workspace_ids = user_workspace_ids(db, current_user.id)
+        if not workspace_ids:
+            return []
+
+        documents = db.query(Document).filter(Document.workspace_id.in_(workspace_ids)).all()
+
         return [
             {
                 "id": document.id,
@@ -250,10 +283,7 @@ def get_documents():
         ]
 
     except Exception:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to fetch documents"
-        )
+        raise HTTPException(status_code=500, detail="Failed to fetch documents")
 
     finally:
         db.close()
@@ -261,10 +291,12 @@ def get_documents():
 
 @router.post("/upload")
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    background_tasks: BackgroundTasks = None,
     language: str = Form("de"),
+    current_user: User = Depends(get_current_user),
 ):
+
     storage_dir = Path("backend/storage/documents")
     storage_dir.mkdir(parents=True, exist_ok=True)
 
@@ -276,12 +308,16 @@ async def upload_document(
         with open(filepath, "wb") as f:
             f.write(await file.read())
 
+        ws = get_personal_workspace(db, current_user.id)
+
         document = Document(
             filename=file.filename,
             file_type=file.content_type,
             storage_path=str(filepath),
             file_status="uploaded",
-            language=(language or "de").strip()
+            language=(language or "de").strip(),
+            workspace_id=ws.id,
+            uploaded_by_user_id=current_user.id,
         )
 
         db.add(document)
@@ -310,21 +346,31 @@ async def upload_document(
 
 
 @router.post("/{id}/process")
-async def process_document_route(id: int):
+async def process_document_route(id: int, current_user: User = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        document = db.query(Document).filter(Document.id == id).first()
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        if not user_has_access_to_document(db, current_user.id, document):
+            raise HTTPException(status_code=403, detail="Forbidden")
+    finally:
+        db.close()
+
     await process_document_logic(id)
     return {"message": f"Processing started for document {id}"}
 
 
 @router.get("/{id}")
-def get_document(id: int):
+def get_document(id: int, current_user: User = Depends(get_current_user)):
     db = SessionLocal()
     try:
         document = db.query(Document).filter(Document.id == id).first()
         if not document:
-            raise HTTPException(
-                status_code=404,
-                detail="Document not found"
-            )
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        if not user_has_access_to_document(db, current_user.id, document):
+            raise HTTPException(status_code=403, detail="Forbidden")
 
         return {
             "id": document.id,
@@ -340,15 +386,19 @@ def get_document(id: int):
 
 
 @router.patch("/{id}")
-def update_document(id: int, filename: str | None = Body(default=None), file_status: str | None = Body(default=None)):
+def update_document(
+        id: int, filename: str | None = Body(default=None),
+        file_status: str | None = Body(default=None),
+        current_user: User = Depends(get_current_user),
+):
     db = SessionLocal()
     try:
         document = db.query(Document).filter(Document.id == id).first()
         if not document:
-            raise HTTPException(
-                status_code=404,
-                detail="Document not found"
-            )
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        if not user_has_access_to_document(db, current_user.id, document):
+            raise HTTPException(status_code=403, detail="Forbidden")
 
         if filename:
             document.filename = filename
@@ -372,25 +422,22 @@ def update_document(id: int, filename: str | None = Body(default=None), file_sta
         }
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to update document: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to update document: {str(e)}")
 
     finally:
         db.close()
 
 
 @router.delete("/{id}")
-def delete_document(id: int):
+def delete_document(id: int, current_user: User = Depends(get_current_user)):
     db = SessionLocal()
     try:
         document = db.query(Document).filter(Document.id == id).first()
         if not document:
-            raise HTTPException(
-                status_code=404,
-                detail="Document not found"
-            )
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        if not user_has_access_to_document(db, current_user.id, document):
+            raise HTTPException(status_code=403, detail="Forbidden")
 
         filepath = Path(document.storage_path)
         if filepath.exists():

@@ -17,6 +17,9 @@ import { ChatPreview } from "@/components/insight/ChatPreview";
 
 import { useDocuments } from "@/hooks/useDocuments";
 import { cn } from "@/lib/utils";
+import { useEffect } from "react";
+import { apiFetch } from "@/lib/api";
+import { isAuthenticated, clearAccessToken } from "@/lib/auth";
 
 type AppView = "landing" | "app";
 
@@ -35,16 +38,44 @@ const Index = () => {
     uploadDocument,
     selectDocument,
     error,
+    refreshDocuments,
+    resetState,
   } = useDocuments();
+
+  // Auto-login on refresh (if token exists and /auth/me passes)
+  useEffect(() => {
+    const boot = async () => {
+      if (!isAuthenticated()) return;
+      try {
+        const res = await apiFetch("/auth/me");
+        if (res.ok) {
+          setView("app");
+          resetState();
+          await refreshDocuments();
+        } else {
+          clearAccessToken();
+          resetState();
+        }
+      } catch {
+        clearAccessToken();
+        resetState();
+      }
+    };
+    boot();
+  }, [refreshDocuments, resetState]);
 
   const handleStartAgent = () => setShowAuthModal(true);
 
-  const handleAuthenticated = () => {
+  const handleAuthenticated = async () => {
     setShowAuthModal(false);
     setView("app");
+    resetState();
+    await refreshDocuments();
   };
 
   const handleLogout = () => {
+    clearAccessToken();
+    resetState();
     setShowChat(false);
     setSidebarOpen(true);
     setView("landing");

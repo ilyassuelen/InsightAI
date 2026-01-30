@@ -10,3 +10,5 @@ tiktoken
 python-docx
 qdrant-client
 google-genai
+passlib
+python-jose[cryptography]

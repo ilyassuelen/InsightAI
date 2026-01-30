@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Send, MessageSquare, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getReportChatLanguage } from "@/lib/language";
+import { apiJson } from "@/lib/api";
 
 interface ChatPreviewProps {
   documentId?: string;
@@ -35,9 +36,8 @@ export function ChatPreview({ documentId }: ChatPreviewProps) {
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:8000/chat/", {
+      const data = await apiJson<{ answer: string }>("/chat/", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           document_id: Number(documentId),
           message: userMessage.content,
@@ -45,11 +45,6 @@ export function ChatPreview({ documentId }: ChatPreviewProps) {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch chat response");
-      }
-
-      const data = await response.json();
       const botMessage: ChatMessage = { role: "assistant", content: data.answer };
       setMessages((prev) => [...prev, botMessage]);
     } catch (err: any) {

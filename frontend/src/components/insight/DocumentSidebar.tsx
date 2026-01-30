@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Document, DocumentStatus } from "@/types/document";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/api";
 
 interface DocumentSidebarProps {
   documents: Document[];
@@ -76,11 +77,8 @@ export function DocumentSidebar({
     if (!newName || newName.trim() === "" || newName === doc.filename) return;
 
     try {
-      const response = await fetch(`http://localhost:8000/documents/${doc.id}`, {
+      const response = await apiFetch(`/documents/${doc.id}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({ filename: newName }),
       });
 
@@ -108,7 +106,7 @@ export function DocumentSidebar({
     if (!confirm("Are you sure you want to delete this document?")) return;
 
     try {
-      const response = await fetch(`http://localhost:8000/documents/${id}`, {
+      const response = await apiFetch(`/documents/${id}`, {
         method: "DELETE",
       });
 

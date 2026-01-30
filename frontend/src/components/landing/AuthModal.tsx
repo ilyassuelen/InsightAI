@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mail, Lock, User, Eye, EyeOff, Brain, ArrowRight } from 'lucide-react';
+import { apiJson } from "@/lib/api";
+import { setAccessToken } from "@/lib/auth";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -13,17 +15,59 @@ type AuthMode = 'login' | 'register';
 export function AuthModal({ isOpen, onClose, onAuthenticated }: AuthModalProps) {
   const [mode, setMode] = useState<AuthMode>('login');
   const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // UI only - no actual auth logic
-    console.log('Auth submitted:', mode, formData);
-    onAuthenticated();
+    setErrorMsg(null);
+
+    const email = formData.email.trim();
+    const password = formData.password;
+
+    if (!email || !password) {
+        setErrorMsg("Email and password are required.");
+        return;
+    }
+
+    if (password.length < 8) {
+        setErrorMsg("Password must be at least 8 characters.");
+        return;
+    }
+
+    setSubmitting(true);
+
+    try {
+        const endpoint = mode === "login" ? "/auth/login" : "/auth/register";
+
+        const data = await apiJson<{
+            access_token: string;
+            token_type: string;
+            user_id: number;
+            email: string;
+        }>(endpoint, {
+            method: "POST",
+            body: JSON.stringify({ email, password, full_name: formData.name, }),
+        });
+
+        setAccessToken(data.access_token);
+        onAuthenticated();
+    }   catch (err: any) {
+        console.error(err);
+        const msg =
+            typeof err?.message === "string" && err.message.trim()
+            ? err.message
+            : "Login/Register failed. Please check your credentials.";
+        setErrorMsg(msg);
+    }   finally {
+        setSubmitting(false);
+    }
   };
 
   return (
@@ -88,6 +132,11 @@ export function AuthModal({ isOpen, onClose, onAuthenticated }: AuthModalProps) 
                 </p>
 
                 {/* Form */}
+                {errorMsg && (
+                    <div className="mb-5 text-sm text-error bg-error/10 border border-error/20 rounded-xl p-3">
+                        {errorMsg}
+                    </div>
+                )}
                 <form onSubmit={handleSubmit} className="space-y-5">
                   {/* Name field (register only) */}
                   <AnimatePresence mode="wait">
@@ -159,6 +208,7 @@ export function AuthModal({ isOpen, onClose, onAuthenticated }: AuthModalProps) 
                   {/* Submit button */}
                   <button
                     type="submit"
+                    disabled={submitting}
                     className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl gradient-bg text-primary-foreground font-semibold hover:opacity-90 transition-opacity glow-soft group"
                   >
                     <span>{mode === 'login' ? 'Sign In' : 'Create Account'}</span>
