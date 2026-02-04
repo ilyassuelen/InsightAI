@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { HeroSection } from "@/components/landing/HeroSection";
@@ -16,8 +16,8 @@ import { ReportViewer } from "@/components/insight/ReportViewer";
 import { ChatPreview } from "@/components/insight/ChatPreview";
 
 import { useDocuments } from "@/hooks/useDocuments";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { cn } from "@/lib/utils";
-import { useEffect } from "react";
 import { apiFetch } from "@/lib/api";
 import { isAuthenticated, clearAccessToken } from "@/lib/auth";
 
@@ -30,6 +30,20 @@ const Index = () => {
   const [showChat, setShowChat] = useState(false);
 
   const {
+    workspaces,
+    currentWorkspace,
+    isOwner,
+    switchWorkspace,
+    createWorkspace,
+    renameWorkspace,
+    deleteWorkspace,
+    addMember,
+    removeMember,
+    reloadWorkspaces,
+    resetWorkspaceState,
+  } = useWorkspace();
+
+  const {
     documents,
     setDocuments,
     selectedDocument,
@@ -40,7 +54,7 @@ const Index = () => {
     error,
     refreshDocuments,
     resetState,
-  } = useDocuments();
+  } = useDocuments(currentWorkspace?.id);
 
   // Auto-login on refresh (if token exists and /auth/me passes)
   useEffect(() => {
@@ -51,18 +65,20 @@ const Index = () => {
         if (res.ok) {
           setView("app");
           resetState();
-          await refreshDocuments();
+          await reloadWorkspaces();
         } else {
           clearAccessToken();
           resetState();
+          resetWorkspaceState();
         }
       } catch {
         clearAccessToken();
         resetState();
+        resetWorkspaceState();
       }
     };
     boot();
-  }, [refreshDocuments, resetState]);
+  }, [resetState, reloadWorkspaces, resetWorkspaceState]);
 
   const handleStartAgent = () => setShowAuthModal(true);
 
@@ -70,15 +86,32 @@ const Index = () => {
     setShowAuthModal(false);
     setView("app");
     resetState();
-    await refreshDocuments();
+    await reloadWorkspaces();
   };
 
   const handleLogout = () => {
     clearAccessToken();
     resetState();
+    resetWorkspaceState();
     setShowChat(false);
     setSidebarOpen(true);
     setView("landing");
+  };
+
+  const handleWorkspaceSwitch = (workspaceId: string) => {
+    // Clear current UI immediately to avoid showing old user's/documents
+    resetState();
+    switchWorkspace(workspaceId);
+  };
+
+  const handleCreateWorkspace = async (name: string) => {
+    resetState();
+    await createWorkspace(name);
+  };
+
+  const handleDeleteWorkspace = async (workspaceId: string) => {
+    resetState();
+    await deleteWorkspace(workspaceId);
   };
 
   // -------------------- LANDING --------------------
@@ -103,7 +136,20 @@ const Index = () => {
   // -------------------- APP DASHBOARD --------------------
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <Header onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} onLogout={handleLogout} />
+      <Header
+        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        onLogout={handleLogout}
+        // Workspace props
+        workspaces={workspaces}
+        currentWorkspace={currentWorkspace}
+        isWorkspaceOwner={isOwner}
+        onSwitchWorkspace={handleWorkspaceSwitch}
+        onCreateWorkspace={handleCreateWorkspace}
+        onRenameWorkspace={renameWorkspace}
+        onDeleteWorkspace={handleDeleteWorkspace}
+        onAddMember={addMember}
+        onRemoveMember={removeMember}
+      />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Desktop Sidebar */}
@@ -151,7 +197,7 @@ const Index = () => {
                   setDocuments={setDocuments}
                   selectedDocument={selectedDocument}
                   onSelectDocument={(doc) => {
-                    selectDocument(doc); // doc kann null sein ✅
+                    selectDocument(doc);
                     setSidebarOpen(false);
                   }}
                 />
@@ -218,7 +264,7 @@ const Index = () => {
                   <ReportViewer
                     report={report}
                     isLoading={isLoading}
-                    documentName={selectedDocument?.name}
+                    documentName={selectedDocument?.filename}
                   />
                 </div>
               </section>
@@ -236,7 +282,9 @@ const Index = () => {
                 className="hidden lg:block shrink-0 overflow-hidden"
               >
                 <ChatPreview
-                  documentId={selectedDocument?.id != null ? String(selectedDocument.id) : undefined}
+                  documentId={
+                    selectedDocument?.id != null ? String(selectedDocument.id) : undefined
+                  }
                 />
               </motion.div>
             )}

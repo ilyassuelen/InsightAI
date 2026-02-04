@@ -9,6 +9,7 @@ from backend.models.workspace_member import WorkspaceMember
 from backend.services.auth.passwords import hash_password, verify_password
 from backend.services.auth.jwt import create_access_token
 from backend.services.auth.deps import get_current_user
+from backend.services.workspaces.workspace_service import WorkspaceService
 
 router = APIRouter()
 
@@ -36,28 +37,6 @@ class MeResponse(BaseModel):
     id: int
     email: str
     full_name: Optional[str] = None
-
-
-# -------------------- HELPER FUNCTIONS --------------------
-def create_personal_workspace(db, user: User) -> Workspace:
-    workspace = Workspace(
-        name=f"{user.email}'s Personal",
-        type="personal",
-        owner_user_id=user.id,
-    )
-    db.add(workspace)
-    db.commit()
-    db.refresh(workspace)
-
-    member = WorkspaceMember(
-        workspace_id=workspace.id,
-        user_id=user.id,
-        role="owner",
-    )
-    db.add(member)
-    db.commit()
-
-    return workspace
 
 
 # -------------------- Routes --------------------
@@ -89,7 +68,7 @@ def register(payload: RegisterRequest):
         db.refresh(user)
 
         # Create personal workspace + Membership
-        create_personal_workspace(db, user)
+        WorkspaceService.get_personal_workspace(db, user.id)
 
         token = create_access_token(subject=str(user.id))
         return AuthResponse(access_token=token, user_id=user.id, email=user.email)
@@ -110,6 +89,9 @@ def login(payload: LoginRequest):
         user = db.query(User).filter(User.email == email).first()
         if not user or not verify_password(password, user.password_hash):
             raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        # Ensure personal workspace exists
+        WorkspaceService.get_personal_workspace(db, user.id)
 
         token = create_access_token(subject=str(user.id))
         return AuthResponse(access_token=token, user_id=user.id, email=user.email)

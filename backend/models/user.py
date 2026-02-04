@@ -13,3 +13,4 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
 
     workspaces = relationship("WorkspaceMember", back_populates="user", cascade="all, delete-orphan")
+    documents = relationship("Document", back_populates="uploaded_by")

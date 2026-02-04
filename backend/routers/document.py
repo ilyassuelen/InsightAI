@@ -26,7 +26,7 @@ from backend.services.vector.vector_store import upsert_document_chunks, delete_
 
 from backend.services.auth.deps import get_current_user
 from backend.models.user import User
-from backend.services.workspaces.workspace_service import get_personal_workspace
+from backend.services.workspaces.workspace_service import WorkspaceService
 from backend.models.workspace_member import WorkspaceMember
 
 logger = logging.getLogger(__name__)
@@ -35,15 +35,15 @@ router = APIRouter()
 
 # -------------------- ACCESS CONTROL --------------------
 def user_has_access_to_document(db, user_id: int, document: Document) -> bool:
-    return (
+    membership = (
         db.query(WorkspaceMember)
         .filter(
             WorkspaceMember.user_id == user_id,
             WorkspaceMember.workspace_id == document.workspace_id,
         )
         .first()
-        is not None
     )
+    return membership is not None
 
 
 def user_workspace_ids(db, user_id: int) -> list[int]:
@@ -259,15 +259,20 @@ async def process_document_logic(document_id: int):
 
 # -------------------- ROUTES --------------------
 @router.get("/")
-def get_documents(current_user: User = Depends(get_current_user)):
+def get_documents(workspace_id: int | None = None, current_user: User = Depends(get_current_user)):
     db = SessionLocal()
     try:
-        # Workspaces where user is a member
-        workspace_ids = user_workspace_ids(db, current_user.id)
-        if not workspace_ids:
-            return []
+        if workspace_id is None:
+            ws = WorkspaceService.get_personal_workspace(db, current_user.id)
+            workspace_id = ws.id
+        else:
+            WorkspaceService.require_member(db, workspace_id, current_user.id)
 
-        documents = db.query(Document).filter(Document.workspace_id.in_(workspace_ids)).all()
+        documents = (
+            db.query(Document)
+            .filter(Document.workspace_id == workspace_id)
+            .all()
+        )
 
         return [
             {
@@ -277,7 +282,8 @@ def get_documents(current_user: User = Depends(get_current_user)):
                 "storage_path": document.storage_path,
                 "file_status": document.file_status,
                 "language": document.language,
-                "created_at": document.created_at
+                "created_at": document.created_at,
+                "workspace_id": document.workspace_id
             }
             for document in documents
         ]
@@ -294,6 +300,7 @@ async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     language: str = Form("de"),
+    workspace_id: int | None = Form(default=None),
     current_user: User = Depends(get_current_user),
 ):
 
@@ -308,7 +315,13 @@ async def upload_document(
         with open(filepath, "wb") as f:
             f.write(await file.read())
 
-        ws = get_personal_workspace(db, current_user.id)
+        # Default: personal workspace
+        if workspace_id is None:
+            ws = WorkspaceService.get_personal_workspace(db, current_user.id)
+            workspace_id = ws.id
+        else:
+            # Must be member of the selected workspace
+            WorkspaceService.require_member(db, workspace_id, current_user.id)
 
         document = Document(
             filename=file.filename,
@@ -316,7 +329,7 @@ async def upload_document(
             storage_path=str(filepath),
             file_status="uploaded",
             language=(language or "de").strip(),
-            workspace_id=ws.id,
+            workspace_id=workspace_id,
             uploaded_by_user_id=current_user.id,
         )
 
@@ -331,7 +344,8 @@ async def upload_document(
             "message": "Document uploaded successfully and processing started",
             "document_id": document.id,
             "status": document.file_status,
-            "language": document.language
+            "language": document.language,
+            "workspace_id": document.workspace_id
         }
 
     except Exception as e:

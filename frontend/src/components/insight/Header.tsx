@@ -1,18 +1,49 @@
 import { motion } from "framer-motion";
 import { Menu, Sparkles, LogOut } from "lucide-react";
-import { LanguageSelector } from './LanguageSelector';
+import { LanguageSelector } from "./LanguageSelector";
+import { WorkspaceSelector } from "@/components/workspace";
+import type { Workspace } from "@/types/workspace";
 
 interface HeaderProps {
   onToggleSidebar?: () => void;
   version?: string;
   onLogout?: () => void;
+
+  workspaces?: Workspace[];
+  currentWorkspace?: Workspace | null;
+  isWorkspaceOwner?: boolean;
+  onSwitchWorkspace?: (workspaceId: string) => void;
+  onCreateWorkspace?: (name: string) => void;
+  onRenameWorkspace?: (workspaceId: string, newName: string) => void;
+  onDeleteWorkspace?: (workspaceId: string) => void;
+  onAddMember?: (workspaceId: string, email: string, name?: string) => void;
+  onRemoveMember?: (workspaceId: string, memberId: string) => void;
 }
 
 export function Header({
   onToggleSidebar,
   version = "v1.0 MVP",
   onLogout,
+
+  workspaces = [],
+  currentWorkspace = null,
+  isWorkspaceOwner = false,
+  onSwitchWorkspace,
+  onCreateWorkspace,
+  onRenameWorkspace,
+  onDeleteWorkspace,
+  onAddMember,
+  onRemoveMember,
 }: HeaderProps) {
+  const showWorkspace =
+    workspaces.length > 0 &&
+    !!onSwitchWorkspace &&
+    !!onCreateWorkspace &&
+    !!onRenameWorkspace &&
+    !!onDeleteWorkspace &&
+    !!onAddMember &&
+    !!onRemoveMember;
+
   return (
     <header className="h-16 border-b border-border glass sticky top-0 z-50">
       <div className="flex items-center justify-between h-full px-6">
@@ -39,7 +70,23 @@ export function Header({
           </motion.div>
         </div>
 
+        {/* Right */}
         <div className="flex items-center gap-3 sm:gap-4">
+          {/* Workspace selector (optional) */}
+          {showWorkspace && (
+            <WorkspaceSelector
+              workspaces={workspaces}
+              currentWorkspace={currentWorkspace}
+              isOwner={isWorkspaceOwner}
+              onSwitchWorkspace={onSwitchWorkspace!}
+              onCreateWorkspace={onCreateWorkspace!}
+              onRenameWorkspace={onRenameWorkspace!}
+              onDeleteWorkspace={onDeleteWorkspace!}
+              onAddMember={onAddMember!}
+              onRemoveMember={onRemoveMember!}
+            />
+          )}
+
           {/* Language selector */}
           <div className="relative">
             <LanguageSelector />
@@ -48,9 +95,7 @@ export function Header({
           {/* Status indicator */}
           <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-success/10 border border-success/20">
             <Sparkles className="h-3.5 w-3.5 text-success" />
-            <span className="text-xs font-medium text-success">
-              Agent Active
-            </span>
+            <span className="text-xs font-medium text-success">Agent Active</span>
           </div>
 
           {/* Version badge */}
@@ -58,7 +103,7 @@ export function Header({
             {version}
           </span>
 
-          {/* Logout button */}
+          {/* Logout */}
           {onLogout && (
             <button
               onClick={onLogout}

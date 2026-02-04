@@ -22,7 +22,7 @@ function normalizeContent(content: unknown): string {
   return String(content);
 }
 
-export function useDocuments() {
+export function useDocuments(workspaceId?: string | number | null) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [report, setReport] = useState<Report | null>(null);
@@ -38,10 +38,15 @@ export function useDocuments() {
     setError(null);
   }, []);
 
+  const getWorkspaceQuery = useCallback(() => {
+    if (workspaceId === null || workspaceId === undefined || workspaceId === '') return '';
+    return `?workspace_id=${encodeURIComponent(String(workspaceId))}`;
+  }, [workspaceId]);
+
   // Refresh documents for current token/user
   const refreshDocuments = useCallback(async () => {
     try {
-      const response = await apiFetch(`/documents`);
+      const response = await apiFetch(`/documents/${getWorkspaceQuery()}`);
       if (!response.ok) throw new Error('Failed to fetch documents');
 
       const docs = await response.json();
@@ -59,7 +64,7 @@ export function useDocuments() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch documents');
     }
-  }, []);
+  }, [getWorkspaceQuery]);
 
   const pollDocumentStatus = useCallback((documentId: number) => {
     const interval = 3000;
@@ -115,6 +120,10 @@ export function useDocuments() {
       formData.append('file', file);
       formData.append('language', getReportChatLanguage());
 
+      if (workspaceId !== null && workspaceId !== undefined && workspaceId !== '') {
+        formData.append('workspace_id', String(workspaceId));
+      }
+
       const response = await apiFetch(`/documents/upload`, {
         method: 'POST',
         body: formData,
@@ -142,7 +151,7 @@ export function useDocuments() {
       );
       setError(err instanceof Error ? err.message : 'Upload failed');
     }
-  }, [pollDocumentStatus]);
+  }, [pollDocumentStatus, workspaceId]);
 
   // ---------------- Select Document ----------------
   const selectDocument = useCallback(async (document: Document | null) => {
@@ -177,7 +186,7 @@ export function useDocuments() {
   // ---------------- Load all documents on mount ----------------
   useEffect(() => {
       refreshDocuments();
-  }, [refreshDocuments]);
+  }, [refreshDocuments, workspaceId]);
 
   return {
     documents,

@@ -17,14 +17,15 @@ class Document(Base):
 
     # Documents belong to a workspace (personal or team)
     workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=False)
+
     # Who uploaded File
     uploaded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
 
     # Relationships
-    workspace = relationship("Workspace")
-    uploaded_by = relationship("User")
+    workspace = relationship("Workspace", back_populates="documents")
+    uploaded_by = relationship("User", foreign_keys=[uploaded_by_user_id], back_populates="documents")
 
     parses = relationship("DocumentParse", back_populates="document", cascade="all, delete-orphan")
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
