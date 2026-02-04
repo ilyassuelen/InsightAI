@@ -7,12 +7,13 @@
 
 ---
 
-**InsightAI** is a modern, document-centric AI application designed to extract structured insights from unstructured data at scale.
+**InsightAI** is a modern, document-centric AI application designed to extract structured insights from unstructured data - built for scalability, collaboration, and real-world usage.
 
-Users can upload **PDF, CSV, DOCX, and TXT files**, which are then parsed, chunked, embedded, and analyzed using a **Retrieval-Augmented Generation (RAG)** pipeline backed by a **Qdrant vector database**. The system generates professional AI reports and enables a **document-aware chat experience**.
+Users can upload **PDF, CSV, DOCX, and TXT files**, which are then parsed, chunked, embedded, and analyzed using a **Retrieval-Augmented Generation (RAG)** pipeline backed by a **Qdrant vector database**. The system generates professional, **multi-language AI reports** and enables a **document-aware chat experience** inside **personal and team workspaces**.
 
-> **Status:** Fully optimized for **PDF, CSV, DOCX, and TXT** documents.  
-> API-connected data sources and multi-user workspaces are planned features.
+> **Status:**  
+> ✅ Fully supports **multi-user team workspaces, document sharing, and role-based access**  
+> ✅ Optimized for **PDF, CSV, DOCX, and TXT** processing
 
 ---
 
@@ -56,7 +57,14 @@ This view shows a partial preview of an AI-generated report, demonstrating how e
   Successfully tested with **25,000+ row CSV files**.
 - **RAG-Based AI Reports**  
   Structured summaries, key figures, findings, risks, and conclusions generated strictly from document evidence.
+- **Multi-Language Report Generation**
+  Generate reports in any supported language directly from the dashboard (e.g. EN, DE, FR, ES, AR, CN etc.).
 - **Interactive Chat:** Ask questions about your documents directly in the chat (first version available).
+- **Team Workspaces & Collaboration**
+  - Personal and shared team spaces
+  - Role-based access (Owner / Member)
+  - Secure document isolation
+  - Member management
 - **OpenAI + Gemini Fallback**  
   Automatic fallback to **Google Gemini** when OpenAI hits:
   - 429 rate limits  
@@ -130,11 +138,14 @@ Create a `.env` file in the **project root**:
 ## Usage
 
 1. Open the frontend in your browser at [http://localhost:8080](http://localhost:8080).
-2. Start the Agent
-3. Upload a Document via the Upload Zone.  
-4. Wait for AI processing (status shown in sidebar).  
-5. Click on the document to view the generated report.  
-6. Use the chat panel to ask specific questions about the document.
+2. Start the Agent 
+3. Register / Login
+4. Use your own or create a workspace
+5. Select your preferred report language in the dashboard.
+6. Upload a Document via the Upload Zone.  
+7. Wait for AI processing (status shown in sidebar).  
+8. Click on the document to view the generated report.  
+9. Use the chat panel to ask specific questions about the document.
 
 ## Tech Stack
 - Frontend: React, TypeScript, Tailwind CSS, Framer Motion
@@ -147,8 +158,6 @@ Create a `.env` file in the **project root**:
 ## Roadmap (Planned Features)
 - API-connected data ingestion
 - Advanced analytics & visualizations
-- Team-based workspaces (shared documents & reports)
-- Language-aware report generation (DE / EN)
 
 ## 🤝 Contributing
 Contributions are welcome! Please follow these steps:
