@@ -1,4 +1,3 @@
-from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -15,7 +14,6 @@ router = APIRouter()
 class ChatRequest(BaseModel):
     document_id: int
     message: str
-    language: Optional[str] = None
 
 class ChatResponse(BaseModel):
     answer: str
@@ -54,7 +52,7 @@ async def create_chat(request: ChatRequest, current_user: User = Depends(get_cur
         db.close()
 
     try:
-        answer = await generate_chat_response(request.document_id, request.message, request.language)
+        answer = await generate_chat_response(request.document_id, request.message)
         return ChatResponse(answer=answer)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate chat response: {e}")

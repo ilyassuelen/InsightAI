@@ -4,62 +4,40 @@ from openai import OpenAI
 import asyncio
 
 from backend.services.ingestion.structured_block_service import get_structured_blocks
-from backend.database.database import SessionLocal
-from backend.models.document import Document
 
 load_dotenv()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
-def language_instruction(lang: str) -> str:
-    lang = (lang or "de").strip()
-    low = lang.lower()
-    if low in ("de", "german", "deutsch"):
-        return (
-            "Output language: German (de). "
-            "IMPORTANT: Write the entire output strictly in German. "
-            "Do not use English words for headings or labels."
-        )
-    if low in ("en", "english"):
-        return (
-            "Output language: English (en). "
-            "IMPORTANT: Write the entire output strictly in English."
-        )
+def language_instruction() -> str:
     return (
-        f"Output language: {lang}. "
-        f"IMPORTANT: Write the entire output strictly in {lang}. "
-        "Do not mix languages."
+        "LANGUAGE RULE (critical):\n"
+        "- ALWAYS answer in the language of the user's latest question.\n"
+        "- The document language is irrelevant for the answer language.\n"
+        "- Do NOT mirror the document's language.\n"
+        "- Keep UI labels, headings, and the whole answer in the question language.\n"
+        "- Format numbers in the question language (English: 4.8 billion; German: 4,8 Milliarden).\n"
+        "- Only translate if the user explicitly asks for a translation.\n"
+        "\n"
+        "Examples:\n"
+        "User question (EN): 'How much revenue ...?' -> Answer in EN.\n"
+        "User question (DE): 'Wie hoch war ...?' -> Answer in DE.\n"
     )
 
 
-def resolve_language(document_id: int, language: str | None) -> str:
-    if language and language.strip():
-        return language.strip()
-
-    db = SessionLocal()
-
-    try:
-        doc = db.query(Document).filter(Document.id == document_id).first()
-        return (doc.language if doc and doc.language else "de")
-    finally:
-        db.close()
-
-
-async def generate_chat_response(document_id: int, message: str, language: str | None = None) -> str:
+async def generate_chat_response(document_id: int, message: str) -> str:
     """
     Document-aware chat:
     - uses existing structured blocks as context
-    - responds strictly in the selected language (stored or provided)
+    - responds in the language of the user's question (AUTO)
     """
-    lang = resolve_language(document_id, language)
-
     system = (
         "You are InsightAI, a document-aware assistant.\n"
-        f"{language_instruction(lang)}\n"
-        "Answer strictly in the selected language.\n"
+        f"{language_instruction()}\n"
         "Use only the provided document content as your source of truth.\n"
-        "If the document does not contain the answer, say so clearly."
+        "If the document does not contain the answer, say so clearly.\n"
+        "Do not translate unless explicitly asked."
     )
 
     try:
