@@ -12,3 +12,4 @@ qdrant-client
 google-genai
 passlib
 python-jose[cryptography]
+langfuse
