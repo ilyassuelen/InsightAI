@@ -8,6 +8,11 @@ from backend.models.document import Document
 from backend.models.document_block import DocumentBlock
 from backend.services.vector.vector_store import query_similar_chunks
 from backend.services.reporting.report_schema import ReportModel, ReportSection, KeyFigure
+from backend.services.observability.langfuse_client import langfuse
+from backend.services.observability.langfuse_helpers import (
+    langfuse_span,
+    hash_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -189,55 +194,76 @@ def generate_report_for_document(db: Session, document_id: int) -> Dict[str, Any
 
     logger.info(f"Generating report (section-by-section) for document {document_id} (lang={lang})")
 
+    base_meta = {
+        "document_id": document_id,
+        "workspace_id": getattr(document, "workspace_id", None),
+        "language": lang,
+        "filename": getattr(document, "filename", None)
+    }
+
     sections: List[ReportSection] = []
     key_figures: List[KeyFigure] = []
 
-    for heading, instruction in REPORT_SECTIONS:
-        hits = query_similar_chunks(document_id=document_id, query=f"{heading}. {instruction}", k=8)
+    with langfuse_span(
+        langfuse,
+        name="report.generate",
+        input={"document_id": document_id},
+        metadata={**base_meta, "sections_total": len(REPORT_SECTIONS)}
+    ):
+        for heading, instruction in REPORT_SECTIONS:
+            with langfuse_span(
+                langfuse,
+                name="report.section",
+                input={"heading": heading},
+                metadata={**base_meta, "section_heading": heading}
+            ):
+                hits = query_similar_chunks(document_id=document_id, query=f"{heading}. {instruction}", k=8)
 
-        if not hits:
-            blocks = (
-                db.query(DocumentBlock)
-                .filter(DocumentBlock.document_id == document_id)
-                .order_by(DocumentBlock.block_index)
-                .limit(12)
-                .all()
-            )
-            hits = [
-                {
-                    "id": f"block_{b.id}",
-                    "text": b.content,
-                    "metadata": {
-                        "page_start": None,
-                        "page_end": None,
-                        "section_title": b.title or b.semantic_label,
-                    },
-                }
-                for b in blocks
-            ]
+                if not hits:
+                    blocks = (
+                        db.query(DocumentBlock)
+                        .filter(DocumentBlock.document_id == document_id)
+                        .order_by(DocumentBlock.block_index)
+                        .limit(12)
+                        .all()
+                    )
+                    hits = [
+                        {
+                            "id": f"block_{b.id}",
+                            "text": b.content,
+                            "metadata": {
+                                "page_start": None,
+                                "page_end": None,
+                                "section_title": b.title or b.semantic_label,
+                            },
+                        }
+                        for b in blocks
+                    ]
 
-        # 3) Build Evidence-Text
-        evidence_parts = []
-        for h in hits:
-            md = h.get("metadata") or {}
-            evidence_parts.append(
-                f"[{h.get('id')}] (p{md.get('page_start')}–{md.get('page_end')}, section={md.get('section_title')})\n"
-                f"{(h.get('text') or '').strip()}"
-            )
-        evidence_text = "\n\n---\n\n".join(evidence_parts)[:14000]  # safety cap
+                # 3) Build Evidence-Text
+                evidence_parts = []
+                for h in hits:
+                    md = h.get("metadata") or {}
+                    evidence_parts.append(
+                        f"[{h.get('id')}] (p{md.get('page_start')}–{md.get('page_end')}, section={md.get('section_title')})\n"
+                        f"{(h.get('text') or '').strip()}"
+                    )
+                evidence_text = "\n\n---\n\n".join(evidence_parts)[:14000]  # safety cap
+                evidence_chars = len(evidence_text)
+                evidence_hash = hash_text(evidence_text)
 
-        # 4) Sources fallback
-        sources_fallback: List[Dict[str, Any]] = []
-        for h in hits:
-            md = h.get("metadata") or {}
-            sources_fallback.append({
-                "chunk_id": h.get("id"),
-                "page_start": md.get("page_start"),
-                "page_end": md.get("page_end"),
-                "section_title": md.get("section_title"),
-            })
+                # 4) Sources fallback
+                sources_fallback: List[Dict[str, Any]] = []
+                for h in hits:
+                    md = h.get("metadata") or {}
+                    sources_fallback.append({
+                        "chunk_id": h.get("id"),
+                        "page_start": md.get("page_start"),
+                        "page_end": md.get("page_end"),
+                        "section_title": md.get("section_title"),
+                    })
 
-        user_prompt = f"""
+                user_prompt = f"""
 Section: {heading}
 Instruction: {instruction}
 
@@ -245,79 +271,105 @@ Evidence (use only this):
 {evidence_text}
 """.strip()
 
-        # 5) LLM Call: OpenAI primary, Gemini fallback
-        if heading == "Key Figures":
-            data = generate_json(
-                model="gpt-4o-mini",
-                system_prompt=system_keyfig,
-                user_prompt=user_prompt,
-                temperature=0.2,
-            )
+                trace_meta = {
+                    **base_meta,
+                    "report_section": heading,
+                    "evidence_chars": evidence_chars,
+                    "evidence_hash": evidence_hash,
+                    "hits_count": len(hits),
+                    "sources_count": len(sources_fallback)
+                }
+                trace_input = {
+                    "task": "report_section",
+                    "heading": heading
+                }
 
-            extracted = data.get("key_figures", [])
-            validated: List[KeyFigure] = []
+                # 5) LLM Call: OpenAI primary, Gemini fallback
+                if heading == "Key Figures":
+                    data = generate_json(
+                        model="gpt-4o-mini",
+                        system_prompt=system_keyfig,
+                        user_prompt=user_prompt,
+                        temperature=0.2,
+                        trace_meta=trace_meta,
+                        trace_input=trace_input
+                    )
 
-            if isinstance(extracted, list):
-                for item in extracted[:12]:
-                    try:
-                        validated.append(KeyFigure(**item))
-                    except Exception:
-                        continue
+                    extracted = data.get("key_figures", [])
+                    validated: List[KeyFigure] = []
 
-            key_figures = [normalize_key_figure(kf) for kf in validated]
+                    if isinstance(extracted, list):
+                        for item in extracted[:12]:
+                            try:
+                                validated.append(KeyFigure(**item))
+                            except Exception:
+                                continue
 
-            # Build a readable, user-friendly text (no raw JSON)
-            lines = []
-            for kf in key_figures:
-                unit = "" if (kf.unit in ["", "unknown"]) else f" {kf.unit}"
-                context = f" ({kf.context})" if kf.context else ""
-                lines.append(f"- {kf.name}: {kf.value}{unit}{context}")
-            pretty_content = "\n".join(lines) if lines else "No key figures could be extracted from the evidence."
+                    key_figures = [normalize_key_figure(kf) for kf in validated]
 
-            section_dict = {
-                "heading": heading,
-                "content": pretty_content,
-                "sources": data.get("sources", sources_fallback) if isinstance(data.get("sources"),
-                                                                               list) else sources_fallback,
-            }
+                    # Build a readable, user-friendly text (no raw JSON)
+                    lines = []
+                    for kf in key_figures:
+                        unit = "" if (kf.unit in ["", "unknown"]) else f" {kf.unit}"
+                        context = f" ({kf.context})" if kf.context else ""
+                        lines.append(f"- {kf.name}: {kf.value}{unit}{context}")
+                    pretty_content = "\n".join(lines) if lines else "No key figures could be extracted from the evidence."
 
-        else:
-            section_dict = generate_json(
-                model="gpt-4o-mini",
-                system_prompt=system_section,
-                user_prompt=user_prompt,
-                temperature=0.2,
-            )
+                    section_dict = {
+                        "heading": heading,
+                        "content": pretty_content,
+                        "sources": data.get("sources", sources_fallback) if isinstance(data.get("sources"),
+                                                                                       list) else sources_fallback,
+                    }
 
-            # Guardrails
-            if not isinstance(section_dict, dict):
-                section_dict = {}
-            if not section_dict.get("heading"):
-                section_dict["heading"] = heading
-            if section_dict.get("content") is None:
-                section_dict["content"] = ""
-            if not isinstance(section_dict.get("sources"), list):
-                section_dict["sources"] = sources_fallback
+                else:
+                    section_dict = generate_json(
+                        model="gpt-4o-mini",
+                        system_prompt=system_section,
+                        user_prompt=user_prompt,
+                        temperature=0.2,
+                        trace_meta=trace_meta,
+                        trace_input=trace_input
+                    )
 
-        section_obj = ReportSection(**section_dict)
-        sections.append(section_obj)
+                    if not isinstance(section_dict, dict):
+                        section_dict = {}
+                    if not section_dict.get("heading"):
+                        section_dict["heading"] = heading
+                    if section_dict.get("content") is None:
+                        section_dict["content"] = ""
+                    if not isinstance(section_dict.get("sources"), list):
+                        section_dict["sources"] = sources_fallback
 
-    # 6) Final wrapper call
-    assembled = "\n\n".join([f"{s.heading}\n{s.content}" for s in sections])
+                section_obj = ReportSection(**section_dict)
+                sections.append(section_obj)
 
-    final_json = generate_json(
-        model="gpt-4o-mini",
-        system_prompt=system_final,
-        user_prompt=f"Drafted sections:\n\n{assembled}",
-        temperature=0.2,
-    )
+        # 6) Final wrapper call
+        assembled = "\n\n".join([f"{s.heading}\n{s.content}" for s in sections])
 
-    report = ReportModel(
-        title=final_json.get("title", f"Report for {document.filename}"),
-        summary=final_json.get("summary", ""),
-        sections=sections,
-        key_figures=key_figures,
-        conclusion=final_json.get("conclusion", ""),
-    )
+        # Trace Meta for final wrapper call
+        final_meta = {
+            **base_meta,
+            "report_stage": "final_wrapper",
+            "assembled_chars": len(assembled),
+            "assembled_hash": hash_text(assembled)
+        }
 
-    return report.model_dump()
+        final_json = generate_json(
+            model="gpt-4o-mini",
+            system_prompt=system_final,
+            user_prompt=f"Drafted sections:\n\n{assembled}",
+            temperature=0.2,
+            trace_meta=final_meta,
+            trace_input={"task": "report_final_wrapper"}
+        )
+
+        report = ReportModel(
+            title=final_json.get("title", f"Report for {document.filename}"),
+            summary=final_json.get("summary", ""),
+            sections=sections,
+            key_figures=key_figures,
+            conclusion=final_json.get("conclusion", ""),
+        )
+
+        return report.model_dump()

@@ -48,11 +48,18 @@ async def create_chat(request: ChatRequest, current_user: User = Depends(get_cur
 
         if not user_has_access_to_document(db, current_user.id, doc):
             raise HTTPException(status_code=403, detail="Forbidden")
+
+        answer = await generate_chat_response(
+            request.document_id,
+            request.message,
+            user_id=current_user.id,
+            workspace_id=doc.workspace_id
+        )
+        return ChatResponse(answer=answer)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate Chat response: {e}")
     finally:
         db.close()
-
-    try:
-        answer = await generate_chat_response(request.document_id, request.message)
-        return ChatResponse(answer=answer)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate chat response: {e}")
