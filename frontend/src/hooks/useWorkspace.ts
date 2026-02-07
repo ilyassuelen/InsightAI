@@ -36,6 +36,9 @@ export function useWorkspace() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const meId = me?.id ?? null;
+  const currentWorkspaceId = currentWorkspace?.id ?? null;
+
   /* ---------------- Load Me ---------------- */
 
   const loadMe = useCallback(async () => {
@@ -90,10 +93,8 @@ export function useWorkspace() {
   /* ---------------- Load Members ---------------- */
 
   const loadMembers = useCallback(
-    async (workspaceId: string) => {
+    async (workspaceId: string, userId: number) => {
       try {
-        if (!me) return;
-
         const res = await apiFetch(`/workspaces/${workspaceId}/members`);
 
         if (res.status === 401) return;
@@ -110,9 +111,7 @@ export function useWorkspace() {
           joinedAt: new Date(),
         }));
 
-        const myRole =
-          data.find((m) => m.user_id === me.id)?.role ||
-          "member";
+        const myRole = data.find((m) => m.user_id === userId)?.role || "member";
 
         setWorkspaces((prev) =>
           prev.map((w) =>
@@ -139,7 +138,7 @@ export function useWorkspace() {
         console.error(err);
       }
     },
-    [me]
+    []
   );
 
   /* ---------------- Init ---------------- */
@@ -149,10 +148,10 @@ export function useWorkspace() {
   }, [loadWorkspaces]);
 
   useEffect(() => {
-    if (currentWorkspace && me) {
-      loadMembers(currentWorkspace.id);
+    if (currentWorkspaceId && meId) {
+      void loadMembers(currentWorkspaceId, meId);
     }
-  }, [currentWorkspace, me, loadMembers]);
+  }, [currentWorkspaceId, meId, loadMembers]);
 
   /* ---------------- Switch ---------------- */
 
@@ -233,9 +232,9 @@ export function useWorkspace() {
         throw new Error(data.detail || "Invite failed");
       }
 
-      await loadMembers(workspaceId);
+      if (meId) await loadMembers(workspaceId, meId);
     },
-    [loadMembers]
+    [loadMembers, meId]
   );
 
   /* ---------------- Remove Member ---------------- */
@@ -249,9 +248,9 @@ export function useWorkspace() {
 
       if (!res.ok) throw new Error("Remove failed");
 
-      await loadMembers(workspaceId);
+      if (meId) await loadMembers(workspaceId, meId);
     },
-    [loadMembers]
+    [loadMembers, meId]
   );
 
   /* ---------------- Owner Check ---------------- */
