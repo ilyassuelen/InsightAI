@@ -41,6 +41,7 @@ def ensure_collection(vector_size: int):
             distance=qmodels.Distance.COSINE,
         ),
     )
+    logger.info(f"[Qdrant] Created collection: {COLLECTION_NAME}")
     _COLLECTION_READY = True
 
 
@@ -48,18 +49,44 @@ def upsert_document_chunks(document_id: int, chunks: List[Dict], batch_size: int
     if not chunks:
         return
 
-    ids = [
-        str(uuid.uuid5(uuid.NAMESPACE_URL, f"doc{document_id}_chunk{c['id']}"))
-        for c in chunks
-    ]
     texts = [c["text"] for c in chunks]
 
     vectors = embed_texts_openai(texts)
+
     if not vectors or not vectors[0]:
+        logger.warning("[Qdrant] No embeddings generated")
         return
 
     ensure_collection(vector_size=len(vectors[0]))
 
+    # Delete old chunks of this document to prevent mixing documents
+    try:
+        client.delete(
+            collection_name=COLLECTION_NAME,
+            points_selector=qmodels.Filter(
+                must=[
+                    qmodels.FieldCondition(
+                        key="document_id",
+                        match=qmodels.MatchValue(value=document_id),
+                    )
+                ]
+            ),
+        )
+
+        logger.info(f"[Qdrant] Deleted old vectors for document_id={document_id}")
+
+    except Exception as e:
+        logger.warning(
+            f"[Qdrant] Delete-by-filter failed for document_id={document_id}: {e}"
+        )
+
+    # IDs
+    ids = [
+        str(uuid.uuid5(uuid.NAMESPACE_URL, f"doc{document_id}_chunk{c['id']}"))
+        for c in chunks
+    ]
+
+    # Payloads
     payloads: List[Dict[str, Any]] = []
     for c in chunks:
         md = c.get("metadata") or {}
@@ -76,6 +103,7 @@ def upsert_document_chunks(document_id: int, chunks: List[Dict], batch_size: int
             }
         )
 
+    # Upsert in batches
     for start in range(0, len(ids), batch_size):
         end = start + batch_size
         client.upsert(
@@ -87,6 +115,8 @@ def upsert_document_chunks(document_id: int, chunks: List[Dict], batch_size: int
             ),
         )
 
+    logger.info(f"[Qdrant] Upserted {len(ids)} chunks for document_id={document_id}")
+
 
 def query_similar_chunks(document_id: int, query: str, k: int = 5) -> List[Dict]:
     """Return top-k chunks (text + metadata) for a document_id."""
@@ -94,8 +124,8 @@ def query_similar_chunks(document_id: int, query: str, k: int = 5) -> List[Dict]
     if not q_vec:
         return []
 
-    if not _COLLECTION_READY:
-        return []
+    # Ensure collection with real vector size
+    ensure_collection(vector_size=len(q_vec))
 
     flt = qmodels.Filter(
         must=[
@@ -106,7 +136,6 @@ def query_similar_chunks(document_id: int, query: str, k: int = 5) -> List[Dict]
         ]
     )
 
-    # Qdrant-Client 1.16.x uses query_points()
     results = client.query_points(
         collection_name=COLLECTION_NAME,
         query=q_vec,
@@ -137,8 +166,15 @@ def query_similar_chunks(document_id: int, query: str, k: int = 5) -> List[Dict]
 
 
 def delete_document_chunks(document_id: int):
+    global _COLLECTION_READY
+
+    # Collection existence check without guessing vector size
     if not _COLLECTION_READY:
-        return
+        existing = [c.name for c in client.get_collections().collections]
+        if COLLECTION_NAME not in existing:
+            logger.info(f"[Qdrant] Collection not found: {COLLECTION_NAME}")
+            return
+        _COLLECTION_READY = True
 
     client.delete(
         collection_name=COLLECTION_NAME,
@@ -151,3 +187,4 @@ def delete_document_chunks(document_id: int):
             ]
         ),
     )
+    logger.info(f"[Qdrant] Deleted chunks for document_id={document_id}")
