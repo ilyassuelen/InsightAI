@@ -5,18 +5,18 @@ import { Zap, Brain, Database, Code2, Cpu, Bot } from 'lucide-react';
 
 const technologies = [
   { name: 'FastAPI (Async API)', icon: Zap },
-  { name: 'LLM Pipelines', icon: Brain },
-  { name: 'RAG Architecture', icon: Bot },
-  { name: 'Vector DB (ChromaDB)', icon: Database },
-  { name: 'Embedding Pipelines', icon: Cpu },
-  { name: 'Document Chunking', icon: Code2 },
+  { name: "JWT Auth + Workspaces", icon: Bot },
+  { name: "Multi-Format Document Ingestion", icon: Cpu },
+  { name: "RAG Retrieval", icon: Brain },
+  { name: 'Vector DB (Qdrant)', icon: Database },
+  { name: "LLM Observability (Langfuse)", icon: Bot },
   // Duplicates for infinite scroll
   { name: 'FastAPI (Async API)', icon: Zap },
-  { name: 'LLM Pipelines', icon: Brain },
-  { name: 'RAG Architecture', icon: Bot },
-  { name: 'Vector DB (ChromaDB)', icon: Database },
-  { name: 'Embedding Pipelines', icon: Cpu },
-  { name: 'Document Chunking', icon: Code2 },
+  { name: "JWT Auth + Workspaces", icon: Bot },
+  { name: "Multi-Format Document Ingestion", icon: Cpu },
+  { name: "RAG Retrieval", icon: Brain },
+  { name: 'Vector DB (Qdrant)', icon: Database },
+  { name: "LLM Observability (Langfuse)", icon: Bot },
 ];
 
 export function TechSlider() {
@@ -40,7 +40,7 @@ export function TechSlider() {
             Built on a Modern AI Architecture
           </h2>
           <p className="text-muted-foreground">
-            Designed for scalable document intelligence
+            For Scalable Document Processing
           </p>
         </motion.div>
 
