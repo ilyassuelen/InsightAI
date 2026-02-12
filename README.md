@@ -19,32 +19,12 @@ Users can upload **PDF, CSV, DOCX, and TXT files**, which are then parsed, chunk
 
 ## 🖥️ User Interface Preview
 
-### Landing Page & AI Architecture Overview
+### 🎬 Application Demo
 
-The landing page introduces InsightAI and explains how the agent works, including an overview of the underlying AI architecture and processing workflow.
-
-<p align="center">
-  <img src="static/images/UIScreenshot_1.png" alt="InsightAI Landing Page and Architecture Overview" width="900"/>
-</p>
-
----
-
-### Agent Dashboard
-
-The agent dashboard provides access to uploaded documents, shows their processing status, and includes the document upload area along with a sneak preview of the document-aware AI chat.
+Short walkthrough showing the full InsightAI UI.
 
 <p align="center">
-  <img src="static/images/UIScreenshot_2.png" alt="InsightAI Agent Dashboard" width="900"/>
-</p>
-
----
-
-### AI-Generated Report Preview
-
-This view shows a partial preview of an AI-generated report, demonstrating how extracted insights and structured content are presented to the user.
-
-<p align="center">
-  <img src="static/images/UIScreenshot_3.png" alt="InsightAI Report Preview" width="900"/>
+  <img src="static/images/demo.gif" alt="InsightAI Application Demo" width="900"/>
 </p>
 
 ---
@@ -71,7 +51,7 @@ This view shows a partial preview of an AI-generated report, demonstrating how e
   - token limits  
   - temporary API failures
 - **Robust Processing Pipeline**  
-  Chunking, embedding, **Qdrant-based vector storage**, block structuring, and reporting are fully decoupled.
+  Chunking, embedding, **Qdrant-based vector storage**, block structuring, reporting and **LLM tracing via Langfuse** for debugging and monitoring.
 - **Responsive UI:** Optimized for desktop and mobile devices.  
 
 ---
@@ -126,13 +106,17 @@ npm run dev
 
 Create a `.env` file in the **project root**:
 
-| Name              | Required | Description                                                         |
-|-------------------|----------|---------------------------------------------------------------------|
-| OPENAI_API_KEY    | ✅        | OpenAI API key for AI report generation                             |
-| GEMINI_API_KEY    | ❌        | Optional Gemini API key (automatic fallback)                        |
-| QDRANT_URL        | ✅        | URL of the Qdrant vector database (default: http://localhost:6333)  |
-| QDRANT_COLLECTION | ❌        | Qdrant collection name (default: insightai_chunks)                  |
-| DATABASE_URL      | ❌        | Optional DB URL for PostgreSQL (defaults to SQLite)                 |
+| Name                | Required | Description                                                        |
+|---------------------|----------|--------------------------------------------------------------------|
+| OPENAI_API_KEY      | ✅        | OpenAI API key for AI report generation                            |
+| GEMINI_API_KEY      | ❌        | Optional Gemini API key (automatic fallback)                       |
+| QDRANT_URL          | ✅        | URL of the Qdrant vector database (default: http://localhost:6333) |
+| QDRANT_COLLECTION   | ❌        | Qdrant collection name (default: insightai_chunks)                 |
+| JWT_SECRET_KEY      | ✅        | Secret key used for signing JWT authentication tokens              |
+| LANGFUSE_PUBLIC_KEY | ❌        | Langfuse public key for LLM tracing                                |
+| LANGFUSE_SECRET_KEY | ❌        | Langfuse secret key for LLM tracing                                |
+| LANGFUSE_HOST       | ❌        | Langfuse host URL (e.g. https://cloud.langfuse.com)                |
+| DATABASE_URL        | ❌        | Optional DB URL for PostgreSQL (defaults to SQLite if not set)     |
 
 
 ## Usage
@@ -150,7 +134,7 @@ Create a `.env` file in the **project root**:
 ## Tech Stack
 - Frontend: React, TypeScript, Tailwind CSS, Framer Motion
 - Backend: Python, FastAPI, Pydantic
-- AI: OpenAI API (primary LLM), Google Gemini (automatic fallback), Retrieval-Augmented Generation (RAG)
+- AI: OpenAI API (primary LLM), Google Gemini (automatic fallback), Retrieval-Augmented Generation (RAG), Langfuse (LLM observability)
 - Vector Storage: **Qdrant**
 - Database: SQLite (default) / PostgreSQL (configurable)
 - State Management: React Hooks & Context
