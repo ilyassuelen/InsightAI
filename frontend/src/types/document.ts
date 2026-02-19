@@ -1,11 +1,16 @@
 export type DocumentStatus =
   | 'uploaded'
   | 'processing'
-  | 'reporting'
+  | 'parsing'
+  | 'chunking'
+  | 'embedding'
+  | 'blocking'
+  | 'structuring'
+  | 'report_generating'
   | 'completed'
-  | 'structured'
   | 'parsed_empty'
-  | 'failed';
+  | 'failed'
+  | 'reporting';
 
 export interface Document {
   id: number;

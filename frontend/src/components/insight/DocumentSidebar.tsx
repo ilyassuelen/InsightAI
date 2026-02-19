@@ -8,6 +8,10 @@ import {
   FolderOpen,
   Delete,
   Pencil,
+  Layers,
+  Cpu,
+  Grid,
+  Brain
 } from "lucide-react";
 import { Document, DocumentStatus } from "@/types/document";
 import { cn } from "@/lib/utils";
@@ -28,40 +32,88 @@ type StatusUI = {
 };
 
 const statusConfig: Record<DocumentStatus, StatusUI> = {
+
   uploaded: {
     icon: Loader2,
     className: "text-muted-foreground animate-spin",
     label: "Uploaded",
     bgClass: "bg-muted/60",
   },
+
   processing: {
     icon: Clock,
     className: "text-processing animate-pulse",
     label: "Processing",
     bgClass: "bg-processing/10",
   },
+
+  parsing: {
+    icon: FileText,
+    className: "text-blue-500 animate-pulse",
+    label: "Parsing document",
+    bgClass: "bg-blue-500/10",
+  },
+
+  chunking: {
+    icon: Layers,
+    className: "text-indigo-500 animate-pulse",
+    label: "Creating chunks",
+    bgClass: "bg-indigo-500/10",
+  },
+
+  embedding: {
+    icon: Cpu,
+    className: "text-cyan-500 animate-pulse",
+    label: "Creating embeddings",
+    bgClass: "bg-cyan-500/10",
+  },
+
+  blocking: {
+    icon: Grid,
+    className: "text-yellow-500 animate-pulse",
+    label: "Creating blocks",
+    bgClass: "bg-yellow-500/10",
+  },
+
+  structuring: {
+    icon: Brain,
+    className: "text-purple-500 animate-pulse",
+    label: "Structuring content",
+    bgClass: "bg-purple-500/10",
+  },
+
+  report_generating: {
+    icon: Loader2,
+    className: "text-purple-500 animate-spin",
+    label: "Generating report",
+    bgClass: "bg-purple-500/10",
+  },
+
   reporting: {
     icon: Loader2,
     className: "text-purple-500 animate-spin",
-    label: "Generating Report",
+    label: "Generating report",
     bgClass: "bg-purple-500/10",
   },
+
   completed: {
     icon: CheckCircle,
     className: "text-success",
     label: "Completed",
     bgClass: "bg-success/10",
   },
-  report_failed: {
+
+  failed: {
     icon: AlertCircle,
     className: "text-error",
-    label: "Report Failed",
+    label: "Processing failed",
     bgClass: "bg-error/10",
   },
+
   parsed_empty: {
     icon: AlertCircle,
     className: "text-muted-foreground",
-    label: "Empty",
+    label: "Empty document",
     bgClass: "bg-muted/60",
   },
 };

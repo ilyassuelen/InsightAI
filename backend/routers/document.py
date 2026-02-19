@@ -55,7 +55,14 @@ def user_workspace_ids(db, user_id: int) -> list[int]:
     return [wid for (wid,) in rows]
 
 
-# -------------------- HELPER FUNCTION --------------------
+# -------------------- HELPER FUNCTIONS --------------------
+def set_status(db, document, status: str):
+    document.file_status = status
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+
+
 def upsert_chunks_to_vectorstore(db, document_id: int):
     chunks = (
         db.query(DocumentChunk)
@@ -107,17 +114,19 @@ async def process_document_logic(document_id: int):
         db.commit()
         delete_document_chunks(document.id)
 
-        document.file_status = "processing"
-        db.commit()
+        # Start
+        set_status(db, document, "processing")
 
         parse_id = None
 
         # ---------------- CSV ----------------
         if document.file_type in ("text/csv", "application/csv"):
-            # Stream rows (memory safe)
+            set_status(db, document, "parsing")
+
             rows_iter = iter_csv_rows(document.storage_path)
 
-            # Chunk stream into DocumentChunk (token safe)
+            set_status(db, document, "chunking")
+
             created_chunks = chunk_csv_stream(
                 document_id=document.id,
                 rows_iter=rows_iter,
@@ -127,12 +136,15 @@ async def process_document_logic(document_id: int):
             )
 
             if created_chunks == 0:
-                document.file_status = "parsed_empty"
-                db.commit()
+                set_status(db, document, "parsed_empty")
                 return
+
+            set_status(db, document, "embedding")
 
             # Upsert chunks to qdrant
             upsert_chunks_to_vectorstore(db, document.id)
+
+            set_status(db, document, "blocking")
 
             # Blocks
             rows_for_blocks = []
@@ -149,13 +161,15 @@ async def process_document_logic(document_id: int):
 
         # ---------------- TXT ----------------
         elif document.file_type in ("text/plain", "text/markdown"):
+            set_status(db, document, "parsing")
+
             full_text = parse_txt(document.storage_path)
 
             if not full_text.strip():
-                document.file_status = "parsed_empty"
-                db.commit()
-                logger.info(f"Document {document_id} is empty")
+                set_status(db, document, "parsed_empty")
                 return
+
+            set_status(db, document, "chunking")
 
             # Chunking
             chunk_text_from_text(
@@ -166,10 +180,12 @@ async def process_document_logic(document_id: int):
             )
             logger.info(f"Chunking completed for document ID {document.id}")
 
-            # Upsert chunks to qdrant
+            set_status(db, document, "embedding")
+
             upsert_chunks_to_vectorstore(db, document.id)
 
-            # Blocks
+            set_status(db, document, "blocking")
+
             create_blocks_from_chunks(
                 document_id=document.id,
                 parse_id=None
@@ -180,13 +196,16 @@ async def process_document_logic(document_id: int):
         elif document.file_type in (
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         ):
+            set_status(db, document, "parsing")
+
             full_text = parse_docx(document.storage_path)
 
             if not full_text.strip():
-                document.file_status = "parsed_empty"
-                db.commit()
+                set_status(db, document, "parsed_empty")
                 logger.info(f"Document {document_id} is empty")
                 return
+
+            set_status(db, document, "chunking")
 
             # Chunking
             chunk_text_from_text(
@@ -197,10 +216,12 @@ async def process_document_logic(document_id: int):
             )
             logger.info(f"Chunking completed for document ID {document.id}")
 
-            # Upsert chunks to qdrant
+            set_status(db, document, "embedding")
+
             upsert_chunks_to_vectorstore(db, document.id)
 
-            # Blocks
+            set_status(db, document, "blocking")
+
             create_blocks_from_chunks(
                 document_id=document.id,
                 parse_id=None
@@ -209,15 +230,19 @@ async def process_document_logic(document_id: int):
 
         # ---------------- PDF ----------------
         else:
-            # Chunk PDF with Docling + HybridChunker
+            set_status(db, document, "parsing")
+
             parse_id, total_chunks = chunk_pdf(
                 document_id=document.id,
                 pdf_path=document.storage_path,
             )
 
-            # Upsert chunks to qdrant
+            set_status(db, document, "embedding")
+
             upsert_chunks_to_vectorstore(db, document.id)
             logger.info(f"Chunking completed for document ID {document.id} ({total_chunks} chunks)")
+
+            set_status(db, document, "blocking")
 
             create_blocks_from_chunks(
                 document_id=document.id,
@@ -225,33 +250,32 @@ async def process_document_logic(document_id: int):
             )
             logger.info(f"Block creation completed for document ID {document.id}")
 
-        document.file_status = "reporting"
-        db.commit()
-        logger.info(f"Document {document.id} is now in reporting status")
-
         # LLM Structuring
+        set_status(db, document, "structuring")
+
         await structure_blocks(
             document_id=document.id,
             parse_id=parse_id
         )
 
-        # Generate Report
+        # Report Generation
+        set_status(db, document, "report_generating")
+
         report_data = generate_report_for_document(db, document.id)
         report = Report(document_id=document.id, content=report_data)
         db.add(report)
         db.commit()
         db.refresh(report)
+        set_status(db, document, "completed")
         logger.info(f"Report created for document {document.id}")
-
-        document.file_status = "completed"
-        db.commit()
 
     except Exception as e:
         db.rollback()
+
         if document:
-            document.file_status = "report_failed"
-            db.commit()
+            set_status(db, document, "failed")
         logger.exception(f"Document {document_id} processing failed: {e}")
+
     finally:
         db.close()
         logger.info(f"Finished processing document {document_id}")
