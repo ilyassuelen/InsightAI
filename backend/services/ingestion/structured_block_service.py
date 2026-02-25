@@ -13,7 +13,7 @@ MAX_CONCURRENT_LLM_CALLS = 1
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLM_CALLS)
 
 # Number of blocks per LLM call
-BATCH_SIZE = 8
+BATCH_SIZE = 10
 
 SYSTEM_PROMPT = """
 You are an information extraction engine.
@@ -151,7 +151,7 @@ async def structure_blocks(document_id: int, parse_id: Optional[int]) -> List[Di
         batch_results = []
         for batch in batches:
             batch_results.append(await structure_block_batch(batch))
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(0.5)
 
         # Merge maps
         merged: Dict[int, Dict] = {}

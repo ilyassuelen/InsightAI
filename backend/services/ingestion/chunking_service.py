@@ -11,7 +11,6 @@ from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
 
 ENCODING = tiktoken.encoding_for_model("gpt-4o-mini")
 MAX_TOKENS = 1000
-OVERLAP = 300
 
 
 # ------------- CSV HELPERS -------------
@@ -22,6 +21,7 @@ def row_to_json_line(row: dict) -> str:
 
 # ------------- TEXT CHUNKING -------------
 def chunk_text_from_text(
+        db,
         document_id: int,
         parse_id: Optional[int],
         text: str,
@@ -35,26 +35,24 @@ def chunk_text_from_text(
     Splits a plain text into token chunks and stores them in DocumentChunk.
     Keeps section metadata if provided.
     """
-    db = SessionLocal()
 
-    try:
-        if not text or not text.strip():
-            return 0, start_index
+    if not text or not text.strip():
+        return 0, start_index
 
-        tokens = ENCODING.encode(text)
-        chunks = [
-            tokens[i:i + max_tokens]
-            for i in range(0, len(tokens), max_tokens)
-        ]
+    tokens = ENCODING.encode(text)
+    chunks = [
+        tokens[i:i + max_tokens]
+        for i in range(0, len(tokens), max_tokens)
+    ]
 
-        for i, token_chunk in enumerate(chunks):
-            chunk_text_str = ENCODING.decode(token_chunk)
-            db_chunk = DocumentChunk(
+    for i, token_chunk in enumerate(chunks):
+        db.add(
+            DocumentChunk(
                 document_id=document_id,
                 parse_id=parse_id,
                 chunk_index=start_index + i,
                 token_count=len(token_chunk),
-                text=chunk_text_str,
+                text=ENCODING.decode(token_chunk),
                 section_title=section_title,
                 page_start=page_start,
                 page_end=page_end,
@@ -62,60 +60,52 @@ def chunk_text_from_text(
                 keywords=None,
                 topics=None,
             )
-            db.add(db_chunk)
+        )
 
-        db.commit()
-        next_index = start_index + len(chunks)
-        return len(chunks), next_index
-
-    finally:
-        db.close()
+    next_index = start_index + len(chunks)
+    return len(chunks), next_index
 
 
 # ------------- PDF CHUNKING -------------
-def chunk_pdf(document_id: int, pdf_path: str, max_tokens: int = MAX_TOKENS, overlap: int = OVERLAP) -> tuple[int, int]:
+def chunk_pdf(document_id: int, pdf_path: str, max_tokens: int = MAX_TOKENS) -> tuple[int, int]:
     """
     Parses a PDF using Docling and chunks it using HybridChunker.
     """
-    doc_parse, docling_doc = parse_document(document_id, pdf_path)
-    parse_id = doc_parse.id
+    db = SessionLocal()
 
-    # Initialize HybridChunker
-    tokenizer = OpenAITokenizer(tokenizer=ENCODING, max_tokens=max_tokens)
-    chunker = HybridChunker(tokenizer=tokenizer)
+    try:
+        doc_parse, docling_doc = parse_document(document_id, pdf_path)
+        parse_id = doc_parse.id
 
-    total_chunks = 0
-    global_index = 0
-    doc_chunks = chunker.chunk(dl_doc=docling_doc)
+        # Initialize HybridChunker
+        tokenizer = OpenAITokenizer(tokenizer=ENCODING, max_tokens=max_tokens)
+        chunker = HybridChunker(tokenizer=tokenizer)
 
-    for chunk in doc_chunks:
-        # Get text enriched with context from headings
-        enriched_text = chunker.contextualize(chunk)
+        total_chunks = 0
+        global_index = 0
 
-        # Extract section metadata from heading context
-        section_title = None
-        if hasattr(chunk.meta, "heading_context") and chunk.meta.heading_context:
-            section_title = " > ".join(
-                [h.title for h in chunk.meta.heading_context if getattr(h, "title", None)]
-            )
+        doc_chunks = chunker.chunk(dl_doc=docling_doc)
 
-        # Page start/end if available
-        page_start = getattr(chunk.meta, "page_start", None)
-        page_end = getattr(chunk.meta, "page_end", None)
+        for chunk in doc_chunks:
+            # Get text enriched with context from headings
+            enriched_text = chunker.contextualize(chunk)
 
-        # Tokenize text, chunking with overlap and save in DB
-        tokens = ENCODING.encode(enriched_text)
-        start = 0
+            # Extract section metadata from heading context
+            section_title = None
+            if hasattr(chunk.meta, "heading_context") and chunk.meta.heading_context:
+                section_title = " > ".join(
+                    [h.title for h in chunk.meta.heading_context if getattr(h, "title", None)]
+                )
 
-        while start < len(tokens):
-            end = min(start + max_tokens, len(tokens))
-            token_chunk = tokens[start:end]
-            chunk_text_str = ENCODING.decode(token_chunk)
+            # Page start/end if available
+            page_start = getattr(chunk.meta, "page_start", None)
+            page_end = getattr(chunk.meta, "page_end", None)
 
             created, global_index = chunk_text_from_text(
+                db=db,
                 document_id=document_id,
                 parse_id=parse_id,
-                text=chunk_text_str,
+                text=enriched_text,
                 max_tokens=max_tokens,
                 section_title=section_title,
                 page_start=page_start,
@@ -125,11 +115,11 @@ def chunk_pdf(document_id: int, pdf_path: str, max_tokens: int = MAX_TOKENS, ove
 
             total_chunks += created
 
-            if end == len(tokens):
-                break
-            start = end - overlap
+        db.commit()
+        return parse_id, total_chunks
 
-    return parse_id, total_chunks
+    finally:
+        db.close()
 
 
 # ------------- CSV STREAM CHUNKING -------------
