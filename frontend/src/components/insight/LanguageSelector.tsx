@@ -84,7 +84,7 @@ export function LanguageSelector() {
     <div className="flex items-center gap-2">
       <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
         <Globe className="h-3.5 w-3.5" />
-        <span className="hidden md:inline">Report & Chat</span>
+        <span className="hidden md:inline">Report Language</span>
       </div>
       <div className="flex flex-col gap-1 relative">
         <Select
