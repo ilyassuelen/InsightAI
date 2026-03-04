@@ -13,3 +13,4 @@ google-genai
 passlib
 python-jose[cryptography]
 langfuse
+pymupdf
