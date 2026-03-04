@@ -1,5 +1,5 @@
 import json
-from typing import Iterator, Dict, List, Optional
+from typing import Iterator, Dict, List, Optional, Tuple
 
 from backend.database.database import SessionLocal
 from backend.models.document_chunk import DocumentChunk
@@ -12,10 +12,14 @@ from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
 ENCODING = tiktoken.encoding_for_model("gpt-4o-mini")
 MAX_TOKENS = 1000
 
+# Initialize PDF chunker once
+TOKENIZER = OpenAITokenizer(tokenizer=ENCODING, max_tokens=MAX_TOKENS)
+PDF_CHUNKER = HybridChunker(tokenizer=TOKENIZER)
+
 
 # ------------- CSV HELPERS -------------
 def row_to_json_line(row: dict) -> str:
-    # Keep it compact but stable
+    """Convert a CSV row to compact JSON."""
     return json.dumps(row, ensure_ascii=False, separators=(",", ":"))
 
 
@@ -30,27 +34,23 @@ def chunk_text_from_text(
         page_start: Optional[int] = None,
         page_end: Optional[int] = None,
         start_index: int = 0
-) -> tuple[int, int]:
-    """
-    Splits a plain text into token chunks and stores them in DocumentChunk.
-    Keeps section metadata if provided.
-    """
+) -> Tuple[int, int]:
+    """Splits plain text into token chunks and stores them in DocumentChunk."""
 
     if not text or not text.strip():
         return 0, start_index
 
     tokens = ENCODING.encode(text)
-    chunks = [
-        tokens[i:i + max_tokens]
-        for i in range(0, len(tokens), max_tokens)
-    ]
 
-    for i, token_chunk in enumerate(chunks):
-        db.add(
-            DocumentChunk(
+    created = 0
+
+    for i in range(0, len(tokens), max_tokens):
+        token_chunk = tokens[i:i + max_tokens]
+
+        db_chunk = DocumentChunk(
                 document_id=document_id,
                 parse_id=parse_id,
-                chunk_index=start_index + i,
+                chunk_index=start_index + created,
                 token_count=len(token_chunk),
                 text=ENCODING.decode(token_chunk),
                 section_title=section_title,
@@ -59,42 +59,41 @@ def chunk_text_from_text(
                 summary=None,
                 keywords=None,
                 topics=None,
-            )
         )
+        db.add(db_chunk)
+        created += 1
 
-    next_index = start_index + len(chunks)
-    return len(chunks), next_index
+    next_index = start_index + created
+    return created, next_index
 
 
 # ------------- PDF CHUNKING -------------
-def chunk_pdf(document_id: int, pdf_path: str, max_tokens: int = MAX_TOKENS) -> tuple[int, int]:
+def chunk_pdf(document_id: int, pdf_path: str, max_tokens: int = MAX_TOKENS) -> Tuple[Optional[int], int]:
     """
-    Parses a PDF using Docling and chunks it using HybridChunker.
+    Parses a PDF using Docling and create chunks using HybridChunker.
     """
     db = SessionLocal()
+    parse_id: Optional[int] = None
 
     try:
         doc_parse, docling_doc = parse_document(document_id, pdf_path)
         parse_id = doc_parse.id
 
-        # Initialize HybridChunker
-        tokenizer = OpenAITokenizer(tokenizer=ENCODING, max_tokens=max_tokens)
-        chunker = HybridChunker(tokenizer=tokenizer)
-
         total_chunks = 0
         global_index = 0
 
-        doc_chunks = chunker.chunk(dl_doc=docling_doc)
+        doc_chunks = PDF_CHUNKER.chunk(dl_doc=docling_doc)
 
         for chunk in doc_chunks:
             # Get text enriched with context from headings
-            enriched_text = chunker.contextualize(chunk)
+            enriched_text = PDF_CHUNKER.contextualize(chunk)
 
             # Extract section metadata from heading context
             section_title = None
             if hasattr(chunk.meta, "heading_context") and chunk.meta.heading_context:
                 section_title = " > ".join(
-                    [h.title for h in chunk.meta.heading_context if getattr(h, "title", None)]
+                    h.title for h in chunk.meta.heading_context
+                    if getattr(h, "title", None)
                 )
 
             # Page start/end if available
@@ -126,16 +125,13 @@ def chunk_pdf(document_id: int, pdf_path: str, max_tokens: int = MAX_TOKENS) -> 
 def chunk_csv_stream(
     document_id: int,
     rows_iter: Iterator[Dict],
-    max_tokens: int = 1200,           # safe for embeddings
+    max_tokens: int = 1200,
     overlap_rows: int = 5,
     section_title: Optional[str] = "CSV",
 ) -> int:
-    """
-    Streams CSV rows and creates DocumentChunk entries with token-based chunking.
-    - Memory safe (doesn't load full CSV)
-    - Token safe (prevents embedding context overflow)
-    """
+    """Stream CSV rows and create token-safe DocumentChunks."""
     db = SessionLocal()
+
     try:
         created = 0
         buffer_rows: List[Dict] = []
@@ -150,17 +146,17 @@ def chunk_csv_stream(
                 return
 
             lines = ["CSV Records (JSON):"]
-            lines.extend([row_to_json_line(r) for r in rows])
+            lines.extend(row_to_json_line(r) for r in rows)
 
             text = "\n".join(lines)
-            tc = token_len(text)
+            token_count = token_len(text)
 
             db.add(
                 DocumentChunk(
                     document_id=document_id,
                     parse_id=None,
                     chunk_index=created,
-                    token_count=tc,
+                    token_count=token_count,
                     text=text,
                     section_title=section_title,
                     page_start=None,
@@ -179,22 +175,16 @@ def chunk_csv_stream(
             # If a single row is too large, shorten it significantly so that we can still embed it.
             if line_tokens > max_tokens:
                 toks = ENCODING.encode(line)
-                truncated = ENCODING.decode(toks[: max(0, max_tokens - 50)])
+                truncated = ENCODING.decode(toks[: max_tokens - 50])
                 row = {"__truncated_row__": truncated}
                 line = row_to_json_line(row)
                 line_tokens = token_len(line)
 
-            # If adding this row would exceed token budget -> flush current buffer
             if buffer_rows and (buffer_token_count + line_tokens) > max_tokens:
                 flush(buffer_rows)
 
-                # overlap: keep last N rows
-                if overlap_rows > 0:
-                    buffer_rows = buffer_rows[-overlap_rows:]
-                else:
-                    buffer_rows = []
+                buffer_rows = buffer_rows[-overlap_rows:] if overlap_rows > 0 else []
 
-                # Recalculate buffer tokens
                 buffer_token_count = 0
                 for r in buffer_rows:
                     buffer_token_count += token_len(row_to_json_line(r))
@@ -219,9 +209,8 @@ def chunk_csv_rows(
         section_title: Optional[str] = "CSV",
 ) -> int:
     """
-    Turns CSV rows into DocumentChunk entries so you can embed them.
-    Chunking is row-based.
-    For large CSVs, prefer chunk_csv_stream().
+    Row-based CSV chunking (legacy method).
+    Prefer chunk_csv_stream for large files.
     """
     db = SessionLocal()
     try:
@@ -242,23 +231,25 @@ def chunk_csv_rows(
             for r in chunk_rows:
                 lines.append(" | ".join(f"{h}={str(r.get(h, ''))}" for h in headers))
 
-            chunk_text_str = "\n".join(lines)
-            token_count = len(ENCODING.encode(chunk_text_str))
+            text = "\n".join(lines)
+            token_count = len(ENCODING.encode(text))
 
-            db_chunk = DocumentChunk(
-                document_id=document_id,
-                parse_id=None,
-                chunk_index=created,
-                token_count=token_count,
-                text=chunk_text_str,
-                section_title=section_title,
-                page_start=None,
-                page_end=None,
-                summary=None,
-                keywords=None,
-                topics=None,
+            db.add(
+                DocumentChunk(
+                    document_id=document_id,
+                    parse_id=None,
+                    chunk_index=created,
+                    token_count=token_count,
+                    text=text,
+                    section_title=section_title,
+                    page_start=None,
+                    page_end=None,
+                    summary=None,
+                    keywords=None,
+                    topics=None,
+                )
             )
-            db.add(db_chunk)
+
             created += 1
 
             if end == len(rows):

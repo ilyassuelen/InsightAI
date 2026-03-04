@@ -173,11 +173,13 @@ async def process_document_logic(document_id: int):
 
             # Chunking
             chunk_text_from_text(
+                db=db,
                 document_id=document.id,
                 parse_id=None,
                 text=full_text,
                 max_tokens=MAX_TOKENS
             )
+            db.commit()
             logger.info(f"Chunking completed for document ID {document.id}")
 
             set_status(db, document, "embedding")
@@ -209,11 +211,13 @@ async def process_document_logic(document_id: int):
 
             # Chunking
             chunk_text_from_text(
+                db=db,
                 document_id=document.id,
                 parse_id=None,
                 text=full_text,
                 max_tokens=MAX_TOKENS
             )
+            db.commit()
             logger.info(f"Chunking completed for document ID {document.id}")
 
             set_status(db, document, "embedding")
@@ -303,7 +307,6 @@ def get_documents(workspace_id: int | None = None, current_user: User = Depends(
                 "id": document.id,
                 "filename": document.filename,
                 "file_type": document.file_type,
-                "storage_path": document.storage_path,
                 "file_status": document.file_status,
                 "language": document.language,
                 "created_at": document.created_at,
@@ -414,7 +417,6 @@ def get_document(id: int, current_user: User = Depends(get_current_user)):
             "id": document.id,
             "filename": document.filename,
             "file_type": document.file_type,
-            "storage_path": document.storage_path,
             "file_status": document.file_status,
             "language": document.language,
             "created_at": document.created_at
@@ -452,7 +454,6 @@ def update_document(
                 "id": document.id,
                 "filename": document.filename,
                 "file_type": document.file_type,
-                "storage_path": document.storage_path,
                 "file_status": document.file_status,
                 "language": document.language,
                 "created_at": document.created_at
