@@ -46,15 +46,6 @@ def user_has_access_to_document(db, user_id: int, document: Document) -> bool:
     return membership is not None
 
 
-def user_workspace_ids(db, user_id: int) -> list[int]:
-    rows = (
-        db.query(WorkspaceMember.workspace_id)
-        .filter(WorkspaceMember.user_id == user_id)
-        .all()
-    )
-    return [wid for (wid,) in rows]
-
-
 # -------------------- HELPER FUNCTIONS --------------------
 def set_status(db, document, status: str):
     """Updates the processing status of a document and persists it to the database."""
@@ -257,7 +248,7 @@ async def process_document_logic(document_id: int):
             set_status(db, document, "embedding")
 
             upsert_chunks_to_vectorstore(db, document.id)
-            logger.info(f"Chunking completed for document ID {document.id} ({total_chunks} chunks)")
+            logger.info(f"Embedding completed for document ID {document.id} ({total_chunks} chunks)")
 
             set_status(db, document, "blocking")
 
