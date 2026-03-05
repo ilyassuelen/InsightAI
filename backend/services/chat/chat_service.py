@@ -2,7 +2,7 @@ import os
 from openai import OpenAI
 import asyncio
 
-from backend.services.ingestion.structured_block_service import get_structured_blocks
+from backend.services.vector.retrieval_service import search_chunks
 from backend.services.observability.langfuse_client import langfuse
 from backend.services.observability.langfuse_helpers import (
     langfuse_span,
@@ -17,6 +17,8 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 def language_instruction() -> str:
+    """Forces the LLM to answer in the language of the user's latest question."""
+
     return (
         "LANGUAGE RULE (critical):\n"
         "- ALWAYS answer in the language of the user's latest question.\n"
@@ -33,6 +35,8 @@ def language_instruction() -> str:
 
 
 async def _openai_call(system: str, user_prompt: str):
+    """Executes an OpenAI Chat Completion request asynchronously."""
+
     return await asyncio.to_thread(
         lambda: client.chat.completions.create(
             model="gpt-4o-mini",
@@ -47,46 +51,68 @@ async def _openai_call(system: str, user_prompt: str):
 
 
 async def generate_chat_response(
-        document_id: int,
+        document_id: int | None,
         message: str,
         *,
         user_id: int | None = None,
         workspace_id: int | None = None
 ) -> str:
     """
-    Document-aware chat:
-    - uses existing structured blocks as context
-    - responds in the language of the user's question (AUTO)
+    Generates an AI response for a user chat message using hybrid retrieval.
+    The function retrieves relevant document chunks via vector search and
+    keyword search, constructs a context prompt, and sends it to the LLM
+    for answer generation.
     """
+
     system = (
-        "You are InsightAI, a document-aware assistant.\n"
+        "You are InsightAI, an AI assistant that answers questions about uploaded documents.\n"
         f"{language_instruction()}\n"
-        "Use only the provided document content as your source of truth.\n"
-        "If the document does not contain the answer, say so clearly.\n"
+        "Use ONLY the provided document context.\n"
+        "If the documents do not contain the answer, say so clearly.\n"
         "Do not translate unless explicitly asked.\n"
+        "ALWAYS include sources.\n"
     )
 
-    blocks = get_structured_blocks(document_id)
-    if not blocks:
-        return "Sorry, there is no content available for this document."
+    # -------- VECTOR SEARCH --------
+    chunks = search_chunks(message)
 
-    context = "\n\n".join(blocks)
+    if not chunks:
+        return "Sorry, I could not find relevant information in the uploaded documents."
+
+    context_parts = []
+    sources = []
+
+    for c in chunks:
+        if c["text"]:
+            context_parts.append(c["text"])
+        src = f"Document {c['document_id']}"
+
+        if c["page"]:
+            src += f" (page {c['page']})"
+
+        sources.append(src)
+
+    context = "\n\n".join(context_parts)
 
     user_prompt = f"""
-Document content (use only this):
+Context from documents:
 {context}
 
 User question:
 {message}
+
+Answer using ONLY the context above.
+
+ALWAYS include sources in your answer.
 """.strip()
 
-    # Privacy Metadata (No raw context/prompt sent)
+    # Privacy Metadata
     ctx_hash = hash_text(context)
     base_meta = {
         "document_id": document_id,
         "workspace_id": workspace_id,
         "user_id": user_id,
-        "blocks_count": len(blocks),
+        "chunks_used": len(chunks),
         "context_chars": len(context),
         "context_hash": ctx_hash,
     }
@@ -95,6 +121,7 @@ User question:
     q_chars = len(message)
 
     start = now_ms()
+    answer = None
 
     # ---------- With Langfuse (privacy) ----------
     if langfuse:
@@ -139,16 +166,25 @@ User question:
                     )
 
                     safe_flush(langfuse)
-                    return answer
 
         except Exception as e:
             print(f"[Langfuse Error]: {e}")
             safe_flush(langfuse)
 
     # ---------- Fallback without Langfuse ----------
-    try:
-        response = await _openai_call(system, user_prompt)
-        return (response.choices[0].message.content or "").strip()
-    except Exception as e:
-        print(f"OpenAI API error: {e}")
-        return "Sorry, I couldn't generate a response at the moment. Please try again."
+    if answer is None:
+        try:
+            response = await _openai_call(system, user_prompt)
+            answer = (response.choices[0].message.content or "").strip()
+        except Exception as e:
+            print(f"OpenAI API error: {e}")
+            return "Sorry, I couldn't generate a response at the moment. Please try again."
+
+    # -------- ADD SOURCES --------
+    unique_sources = sorted(set(sources))
+    answer += "\n\nSources:\n"
+
+    for s in unique_sources:
+        answer += f"- {s}\n"
+
+    return answer

@@ -57,6 +57,7 @@ def user_workspace_ids(db, user_id: int) -> list[int]:
 
 # -------------------- HELPER FUNCTIONS --------------------
 def set_status(db, document, status: str):
+    """Updates the processing status of a document and persists it to the database."""
     document.file_status = status
     db.add(document)
     db.commit()
@@ -64,6 +65,10 @@ def set_status(db, document, status: str):
 
 
 def upsert_chunks_to_vectorstore(db, document_id: int):
+    """
+    Loads document chunks from the database and inserts them into the vector database after embedding.
+    This ensures that newly processed document chunks become searchable via semantic vector search.
+    """
     chunks = (
         db.query(DocumentChunk)
         .filter(DocumentChunk.document_id == document_id)
@@ -91,12 +96,20 @@ def upsert_chunks_to_vectorstore(db, document_id: int):
 # -------------------- PROCESS LOGIC --------------------
 async def process_document_logic(document_id: int):
     """
-    Document processing logic:
-    - parse
-    - chunk
-    - create blocks
-    - structuring LLM
+    Main background processing pipeline for uploaded documents.
+    Pipeline performs the following steps:
+
+    1. Parse the document depending on its file type
+    2. Split the content into chunks
+    3. Generate embeddings and store them in the vector database
+    4. Create document blocks
+    5. Structure blocks using an LLM
+    6. Generate an AI report summarizing the document
+
+    Supported file types:
+    - PDF, CSV, TXT and DOCX
     """
+
     db = SessionLocal()
     document = None
     logger.info(f"Start processing document {document_id}")
@@ -478,14 +491,16 @@ def delete_document(id: int, current_user: User = Depends(get_current_user)):
         if not user_has_access_to_document(db, current_user.id, document):
             raise HTTPException(status_code=403, detail="Forbidden")
 
+        # -------- DELETE EMBEDDINGS FROM QDRANT --------
+        delete_document_chunks(id)
+
+        # -------- DELETE LOCAL FILE --------
         filepath = Path(document.storage_path)
         if filepath.exists():
             filepath.unlink()
 
         db.delete(document)
         db.commit()
-
-        delete_document_chunks(id)
 
         return {"message": f"Document with ID: {id} deleted successfully"}
 
