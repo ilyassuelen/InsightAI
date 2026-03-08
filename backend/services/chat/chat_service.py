@@ -2,6 +2,9 @@ import os
 from openai import OpenAI
 import asyncio
 
+from backend.database.database import SessionLocal
+from backend.models.document import Document
+
 from backend.services.vector.retrieval_service import search_chunks
 from backend.services.observability.langfuse_client import langfuse
 from backend.services.observability.langfuse_helpers import (
@@ -70,7 +73,6 @@ async def generate_chat_response(
         "Use ONLY the provided document context.\n"
         "If the documents do not contain the answer, say so clearly.\n"
         "Do not translate unless explicitly asked.\n"
-        "ALWAYS include sources.\n"
     )
 
     # -------- VECTOR SEARCH --------
@@ -80,17 +82,28 @@ async def generate_chat_response(
         return "Sorry, I could not find relevant information in the uploaded documents."
 
     context_parts = []
-    sources = []
+    sources = set()
+    db = SessionLocal()
 
-    for c in chunks:
-        if c["text"]:
-            context_parts.append(c["text"])
-        src = f"Document {c['document_id']}"
+    try:
+        for c in chunks:
+            if c["text"]:
+                context_parts.append(c["text"])
 
-        if c["page"]:
-            src += f" (page {c['page']})"
+            doc = db.query(Document).filter(Document.id == c["document_id"]).first()
 
-        sources.append(src)
+            if not doc:
+                continue
+
+            src = doc.filename
+
+            if c["page"]:
+                src += f" – page {c['page']}"
+
+            sources.add(src)
+
+    finally:
+        db.close()
 
     context = "\n\n".join(context_parts)
 
@@ -102,8 +115,7 @@ User question:
 {message}
 
 Answer using ONLY the context above.
-
-ALWAYS include sources in your answer.
+Do NOT include sources in the answer.
 """.strip()
 
     # Privacy Metadata
@@ -182,9 +194,11 @@ ALWAYS include sources in your answer.
 
     # -------- ADD SOURCES --------
     unique_sources = sorted(set(sources))
-    answer += "\n\nSources:\n"
 
-    for s in unique_sources:
-        answer += f"- {s}\n"
+    answer = answer.rstrip()
+    answer += "\n\nSources\n────────\n"
+
+    for s in sorted(sources):
+        answer += f"{s}\n"
 
     return answer

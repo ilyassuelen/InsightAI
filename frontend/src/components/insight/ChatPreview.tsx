@@ -126,7 +126,7 @@ export function ChatPreview({ documentId }: ChatPreviewProps) {
                 <div
                   key={idx}
                   className={cn(
-                    "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed border",
+                    "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed border whitespace-pre-wrap",
                     msg.role === "user"
                       ? "ml-auto bg-primary text-primary-foreground border-primary/20"
                       : "mr-auto bg-muted/40 text-foreground border-border"
