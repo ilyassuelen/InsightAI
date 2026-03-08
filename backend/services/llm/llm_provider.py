@@ -20,7 +20,11 @@ from backend.services.observability.langfuse_helpers import (
 
 logger = logging.getLogger(__name__)
 
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), max_retries=0)
+openai_client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    timeout=90.0,
+    max_retries=2
+)
 
 # ------------------------
 # JSON / CHAT COMPLETION
@@ -92,7 +96,13 @@ def generate_json(
                     )
 
                     raw = response.choices[0].message.content or ""
-                    data = json.loads(raw)
+
+                    try:
+                        data = json.loads(raw)
+                    except Exception:
+                        logger.warning("LLM returned invalid JSON, attempting cleanup")
+                        raw = raw.strip().replace("```json", "").replace("```", "")
+                        data = json.loads(raw)
 
                     usage = getattr(response, "usage", None)
                     usage_dict = None
@@ -245,11 +255,15 @@ def generate_json(
 # ------------------------
 def embed_texts(texts: List[str]) -> List[List[float]]:
     """
-    OpenAI embeddings only.
-    Retry with backoff on transient errors.
+    Generate vector embeddings for a list of texts using OpenAI embeddings.
+    Texts are processed in batches to reduce API calls and improve throughput.
 
-    Langfuse (privacy):
-    - Logs counts + total chars + hash of concatenated input (no raw text)
+    If Langfuse is enabled, only privacy-safe metadata is logged,
+    including number of texts, character counts, and latency. Raw input texts are never logged.
+
+    Returns:
+        A list of embedding vectors corresponding to the input texts.
+        Each embedding is a list of floats.
     """
     batch_size = 64
     out: List[List[float]] = []

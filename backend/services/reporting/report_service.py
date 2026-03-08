@@ -1,8 +1,10 @@
 import logging
+import asyncio
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
+from backend.database.database import SessionLocal
 from backend.services.llm.llm_provider import generate_json
 from backend.models.document import Document
 from backend.models.document_block import DocumentBlock
@@ -16,8 +18,16 @@ from backend.services.observability.langfuse_helpers import (
 
 logger = logging.getLogger(__name__)
 
+REPORT_LLM_CONCURRENCY = 2
+report_semaphore = asyncio.Semaphore(REPORT_LLM_CONCURRENCY)
+
 # -------- HELPER FUNCTION FOR LANGUAGE --------
 def language_instruction(lang: str) -> str:
+    """
+    Generate a language instruction for the LLM.
+    Ensures that the LLM produces output entirely in the specified
+    language and does not mix languages within headings or labels.
+    """
     lang = (lang or "de").strip()
     low = lang.lower()
     if low in ("de", "german", "deutsch"):
@@ -124,6 +134,7 @@ def parse_number_de(value: str) -> Optional[float]:
 
 
 def detect_currency(unit: str) -> str:
+    """Detect the currency type from a unit string."""
     u = (unit or "").lower()
     if ("€" in u) or ("eur" in u) or ("euro" in u):
         return "EUR"
@@ -133,10 +144,22 @@ def detect_currency(unit: str) -> str:
 
 
 def currency_symbol(currency: str) -> str:
+    """
+    Convert a currency code into its symbol.
+
+    Returns:
+        Currency symbol ("€", "$") or empty string if unknown.
+    """
     return "€" if currency == "EUR" else "$" if currency == "USD" else ""
 
 
 def format_compact_money(amount: float, currency: str) -> str:
+    """
+    Format a numeric amount into a compact human-readable string.
+    Examples:
+        1200000 -> 1,20 Mio. €
+        2300000000 -> 2,30 Mrd. €
+    """
     sym = currency_symbol(currency)
 
     if amount >= 1_000_000_000:
@@ -152,6 +175,8 @@ def is_thousand_unit(unit: str) -> bool:
 
 
 def normalize_key_figure(kf: KeyFigure) -> KeyFigure:
+    """Normalize and standardize a key figure value."""
+
     unit = (kf.unit or "").strip()
     currency = detect_currency(unit)
 
@@ -179,8 +204,184 @@ def normalize_key_figure(kf: KeyFigure) -> KeyFigure:
     return kf
 
 
+# -------------------- SECTION GENERATION --------------------
+async def generate_section(
+    heading: str,
+    instruction: str,
+    document_id: int,
+    system_section: str,
+    system_keyfig: str,
+    base_meta: Dict[str, Any]
+):
+    """
+    Generate a single report section using LLM analysis.
+
+    The function retrieves relevant document chunks using semantic
+    vector search and constructs an evidence prompt. The evidence
+    is then passed to the LLM to generate a structured section.
+
+    For the "Key Figures" section, the LLM extracts structured
+    KPI objects which are returned separately.
+
+    Returns:
+        Tuple containing:
+            - ReportSection object
+            - List of extracted KeyFigure objects
+    """
+    async with report_semaphore:
+        db = SessionLocal()
+
+        try:
+            hits = query_similar_chunks(document_id=document_id, query=f"{heading}. {instruction}", k=8)
+
+            if not hits:
+                blocks = (
+                    db.query(DocumentBlock)
+                    .filter(DocumentBlock.document_id == document_id)
+                    .order_by(DocumentBlock.block_index)
+                    .limit(12)
+                    .all()
+                )
+
+                hits = [
+                    {
+                        "id": f"block_{b.id}",
+                        "text": b.content,
+                        "metadata": {
+                            "page_start": None,
+                            "page_end": None,
+                            "section_title": b.title or b.semantic_label,
+                        },
+                    }
+                    for b in blocks
+                ]
+
+            evidence_parts = []
+            for h in hits:
+                md = h.get("metadata") or {}
+                evidence_parts.append(
+                    f"[{h.get('id')}] (p{md.get('page_start')}–{md.get('page_end')}, section={md.get('section_title')})\n"
+                    f"{(h.get('text') or '').strip()}"
+                )
+
+            evidence_text = "\n\n---\n\n".join(evidence_parts)[:12000]
+
+            sources_fallback = []
+            for h in hits:
+                md = h.get("metadata") or {}
+                sources_fallback.append({
+                    "chunk_id": h.get("id"),
+                    "page_start": md.get("page_start"),
+                    "page_end": md.get("page_end"),
+                    "section_title": md.get("section_title"),
+                })
+
+            user_prompt = f"""
+Section: {heading}
+Instruction: {instruction}
+        
+Evidence (use only this):
+{evidence_text}
+""".strip()
+
+            if heading == "Key Figures":
+                data = await asyncio.to_thread(
+                    lambda: generate_json(
+                        model="gpt-4o-mini",
+                        system_prompt=system_keyfig,
+                        user_prompt=user_prompt,
+                        temperature=0.2,
+                        trace_meta={**base_meta, "report_section": heading},
+                        trace_input={"task": "report_section", "heading": heading},
+                    )
+                )
+
+                figures = data.get("key_figures", []) if isinstance(data, dict) else []
+
+                lines = []
+                key_figure_objects = []
+
+                for f in figures[:12]:
+                    if not isinstance(f, dict):
+                        continue
+
+                    name = f.get("name", "")
+                    value = f.get("value", "")
+                    unit = f.get("unit", "")
+                    context = f.get("context", "")
+
+                    lines.append(f"- {name}: {value} {unit} ({context})")
+
+                    key_figure_objects.append(
+                        KeyFigure(
+                            name=name,
+                            value=value,
+                            unit=unit,
+                            context=context
+                        )
+                    )
+
+                return (
+                    ReportSection(
+                        heading=heading,
+                        content="\n".join(lines),
+                        sources=(
+                            data.get("sources", sources_fallback)
+                            if isinstance(data, dict) and isinstance(data.get("sources"), list)
+                            else sources_fallback
+                        ),
+                    ),
+                    key_figure_objects
+                )
+
+            data = await asyncio.to_thread(
+                lambda: generate_json(
+                    model="gpt-4o-mini",
+                    system_prompt=system_section,
+                    user_prompt=user_prompt,
+                    temperature=0.3,
+                    trace_meta={**base_meta, "report_section": heading},
+                    trace_input={"task": "report_section", "heading": heading},
+                )
+            )
+
+            if not isinstance(data, dict):
+                data = {}
+
+            sources = data.get("sources", sources_fallback)
+            if not isinstance(sources, list):
+                sources = sources_fallback
+
+            return (
+                ReportSection(
+                    heading=data.get("heading", heading),
+                    content=data.get("content", "") or "",
+                    sources=sources,
+                ),
+                []
+            )
+
+        finally:
+            db.close()
+
+
 # -------------------- MAIN --------------------
-def generate_report_for_document(db: Session, document_id: int) -> Dict[str, Any]:
+async def generate_report_for_document(db: Session, document_id: int) -> Dict[str, Any]:
+    """
+    Generate a full structured report for a document.
+
+    The report is created in multiple parallel LLM calls, each generating a specific section.
+    Extracted key figures are aggregated separately.
+
+    The pipeline performs the following steps:
+        1. Retrieve document metadata
+        2. Generate report sections in parallel
+        3. Aggregate key figures
+        4. Create a final report wrapper (title, summary, conclusion)
+
+    Returns:
+        Dictionary representation of the generated report.
+    """
     document = db.query(Document).filter(Document.id == document_id).first()
     if not document:
         raise ValueError(f"Document {document_id} not found")
@@ -201,7 +402,6 @@ def generate_report_for_document(db: Session, document_id: int) -> Dict[str, Any
         "filename": getattr(document, "filename", None)
     }
 
-    sections: List[ReportSection] = []
     key_figures: List[KeyFigure] = []
 
     with langfuse_span(
@@ -210,139 +410,26 @@ def generate_report_for_document(db: Session, document_id: int) -> Dict[str, Any
         input={"document_id": document_id},
         metadata={**base_meta, "sections_total": len(REPORT_SECTIONS)}
     ):
-        for heading, instruction in REPORT_SECTIONS:
-            with langfuse_span(
-                langfuse,
-                name="report.section",
-                input={"heading": heading},
-                metadata={**base_meta, "section_heading": heading}
-            ):
-                hits = query_similar_chunks(document_id=document_id, query=f"{heading}. {instruction}", k=8)
+        tasks = [
+            generate_section(
+                heading,
+                instruction,
+                document_id,
+                system_section,
+                system_keyfig,
+                base_meta
+            )
+            for heading, instruction in REPORT_SECTIONS
+        ]
 
-                if not hits:
-                    blocks = (
-                        db.query(DocumentBlock)
-                        .filter(DocumentBlock.document_id == document_id)
-                        .order_by(DocumentBlock.block_index)
-                        .limit(12)
-                        .all()
-                    )
-                    hits = [
-                        {
-                            "id": f"block_{b.id}",
-                            "text": b.content,
-                            "metadata": {
-                                "page_start": None,
-                                "page_end": None,
-                                "section_title": b.title or b.semantic_label,
-                            },
-                        }
-                        for b in blocks
-                    ]
+        results = await asyncio.gather(*tasks)
 
-                # 3) Build Evidence-Text
-                evidence_parts = []
-                for h in hits:
-                    md = h.get("metadata") or {}
-                    evidence_parts.append(
-                        f"[{h.get('id')}] (p{md.get('page_start')}–{md.get('page_end')}, section={md.get('section_title')})\n"
-                        f"{(h.get('text') or '').strip()}"
-                    )
-                evidence_text = "\n\n---\n\n".join(evidence_parts)[:14000]  # safety cap
-                evidence_chars = len(evidence_text)
-                evidence_hash = hash_text(evidence_text)
+        sections: List[ReportSection] = []
+        key_figures: List[KeyFigure] = []
 
-                # 4) Sources fallback
-                sources_fallback: List[Dict[str, Any]] = []
-                for h in hits:
-                    md = h.get("metadata") or {}
-                    sources_fallback.append({
-                        "chunk_id": h.get("id"),
-                        "page_start": md.get("page_start"),
-                        "page_end": md.get("page_end"),
-                        "section_title": md.get("section_title"),
-                    })
-
-                user_prompt = f"""
-Section: {heading}
-Instruction: {instruction}
-
-Evidence (use only this):
-{evidence_text}
-""".strip()
-
-                trace_meta = {
-                    **base_meta,
-                    "report_section": heading,
-                    "evidence_chars": evidence_chars,
-                    "evidence_hash": evidence_hash,
-                    "hits_count": len(hits),
-                    "sources_count": len(sources_fallback)
-                }
-                trace_input = {
-                    "task": "report_section",
-                    "heading": heading
-                }
-
-                # 5) LLM Call: OpenAI primary, Gemini fallback
-                if heading == "Key Figures":
-                    data = generate_json(
-                        model="gpt-4o-mini",
-                        system_prompt=system_keyfig,
-                        user_prompt=user_prompt,
-                        temperature=0.2,
-                        trace_meta=trace_meta,
-                        trace_input=trace_input
-                    )
-
-                    extracted = data.get("key_figures", [])
-                    validated: List[KeyFigure] = []
-
-                    if isinstance(extracted, list):
-                        for item in extracted[:12]:
-                            try:
-                                validated.append(KeyFigure(**item))
-                            except Exception:
-                                continue
-
-                    key_figures = [normalize_key_figure(kf) for kf in validated]
-
-                    # Build a readable, user-friendly text (no raw JSON)
-                    lines = []
-                    for kf in key_figures:
-                        unit = "" if (kf.unit in ["", "unknown"]) else f" {kf.unit}"
-                        context = f" ({kf.context})" if kf.context else ""
-                        lines.append(f"- {kf.name}: {kf.value}{unit}{context}")
-                    pretty_content = "\n".join(lines) if lines else "No key figures could be extracted from the evidence."
-
-                    section_dict = {
-                        "heading": heading,
-                        "content": pretty_content,
-                        "sources": data.get("sources", sources_fallback) if isinstance(data.get("sources"),
-                                                                                       list) else sources_fallback,
-                    }
-
-                else:
-                    section_dict = generate_json(
-                        model="gpt-4o-mini",
-                        system_prompt=system_section,
-                        user_prompt=user_prompt,
-                        temperature=0.2,
-                        trace_meta=trace_meta,
-                        trace_input=trace_input
-                    )
-
-                    if not isinstance(section_dict, dict):
-                        section_dict = {}
-                    if not section_dict.get("heading"):
-                        section_dict["heading"] = heading
-                    if section_dict.get("content") is None:
-                        section_dict["content"] = ""
-                    if not isinstance(section_dict.get("sources"), list):
-                        section_dict["sources"] = sources_fallback
-
-                section_obj = ReportSection(**section_dict)
-                sections.append(section_obj)
+        for section, kf in results:
+            sections.append(section)
+            key_figures.extend(kf)
 
         # 6) Final wrapper call
         assembled = "\n\n".join([f"{s.heading}\n{s.content}" for s in sections])

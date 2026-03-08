@@ -269,7 +269,7 @@ async def process_document_logic(document_id: int):
         # Report Generation
         set_status(db, document, "report_generating")
 
-        report_data = generate_report_for_document(db, document.id)
+        report_data = await generate_report_for_document(db, document_id)
         report = Report(document_id=document.id, content=report_data)
         db.add(report)
         db.commit()

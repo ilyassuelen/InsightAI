@@ -13,7 +13,7 @@ MAX_CONCURRENT_LLM_CALLS = 1
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLM_CALLS)
 
 # Number of blocks per LLM call
-BATCH_SIZE = 10
+BATCH_SIZE = 25
 
 SYSTEM_PROMPT = """
 You are an information extraction engine.
@@ -59,8 +59,10 @@ Field rules:
 # -------------------- LLM CALL (BATCH) --------------------
 async def structure_block_batch(blocks: List[DocumentBlock]) -> Dict[int, Dict]:
     """
-    Sends a batch of DocumentBlocks to the LLM provider (OpenAI -> Gemini fallback).
-    Returns a mapping: block_id -> {section_type, title, summary}
+    Structure a batch of document blocks using an LLM.
+
+    Each block is analyzed and classified into a semantic section type.
+    The LLM also generates a short summary for each block.
     """
     async with semaphore:
         parts = []
@@ -124,6 +126,10 @@ async def structure_block_batch(blocks: List[DocumentBlock]) -> Dict[int, Dict]:
 async def structure_blocks(document_id: int, parse_id: Optional[int]) -> List[Dict]:
     """
     Structures all DocumentBlocks of a document using batched LLM calls.
+    Each block receives semantic metadata such as section type, title, and a concise summary.
+
+    Returns:
+        List of structured block dictionaries including content and metadata.
     """
     db = SessionLocal()
     try:
@@ -148,14 +154,15 @@ async def structure_blocks(document_id: int, parse_id: Optional[int]) -> List[Di
 
         # Split into batches
         batches = [blocks[i:i + BATCH_SIZE] for i in range(0, len(blocks), BATCH_SIZE)]
-        batch_results = []
-        for batch in batches:
-            batch_results.append(await structure_block_batch(batch))
-            await asyncio.sleep(0.5)
+        tasks = [structure_block_batch(batch) for batch in batches]
+        batch_results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Merge maps
         merged: Dict[int, Dict] = {}
+
         for m in batch_results:
+            if isinstance(m, Exception):
+                logger.error(f"Batch failed: {m}")
+                continue
             merged.update(m)
 
         # Persist to DB + build return list
