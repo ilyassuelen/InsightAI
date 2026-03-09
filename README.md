@@ -1,15 +1,20 @@
 ![InsightAI Logo](frontend/public/logo.png)
+> Turn unstructured documents into structured insights using AI.
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-brightgreen)
 ![Python ≥3.10](https://img.shields.io/badge/python-%3E%3D3.10-blue)
-![Node ≥18](https://img.shields.io/badge/node-%3E%3D18-green)
+![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688)
+![Vector DB](https://img.shields.io/badge/vector%20db-Qdrant-red)
 ![AI: OpenAI + Gemini](https://img.shields.io/badge/AI-OpenAI%20%2B%20Gemini-purple)
+![React](https://img.shields.io/badge/frontend-React-61DAFB)
+![Node ≥18](https://img.shields.io/badge/node-%3E%3D18-green)
 
 ---
 
-**InsightAI** is a modern, document-centric AI application designed to extract structured insights from unstructured data - built for scalability, collaboration, and real-world usage.
+**InsightAI** is a document-centric AI platform that transforms unstructured data into structured insights.
 
-Users can upload **PDF, CSV, DOCX, and TXT files**, which are then parsed, chunked, embedded, and analyzed using a **Retrieval-Augmented Generation (RAG)** pipeline backed by a **Qdrant vector database**. The system generates professional, **multi-language AI reports** and enables a **document-aware chat experience** inside **personal and team workspaces**.
+Users can upload **PDF, CSV, DOCX, and TXT files**, which are processed through a **Retrieval-Augmented Generation (RAG)** pipeline backed by **Qdrant vector search**.
+The system generates **structured AI reports** and enables an **interactive document-aware chat** within **personal and team workspaces**.
 
 > **Status:**  
 > ✅ Fully supports **multi-user team workspaces, document sharing, and role-based access**  
@@ -45,6 +50,8 @@ Short walkthrough showing the full InsightAI UI.
   - Role-based access (Owner / Member)
   - Secure document isolation
   - Member management
+- **Workspace-Scoped Retrieval**  
+  Vector search and document retrieval are strictly isolated per workspace to ensure secure multi-user environments.
 - **OpenAI + Gemini Fallback**  
   Automatic fallback to **Google Gemini** when OpenAI hits:
   - 429 rate limits  
@@ -64,16 +71,16 @@ Short walkthrough showing the full InsightAI UI.
 - Python >= 3.10  
 - Git  
 
-### Quick Start (macOS / Linux / Windows PowerShell)
+### Quick Start (macOS / Linux / Windows PowerShell):
 
+#### 1. Clone the repository
 ```bash
-# Clone the repository
 git clone https://github.com/ilyassuelen/InsightAI
 cd InsightAI
 ```
 
-#### Vector Database (Qdrant)
-InsightAI uses **Qdrant** as its vector database for embeddings and retrieval.
+#### 2. Vector Database (Qdrant)
+InsightAI uses **Qdrant** as the vector database.
 
 Make sure Docker is running, then start Qdrant locally:
 
@@ -82,6 +89,8 @@ docker run -p 6333:6333 -p 6334:6334 \
   -v $(pwd)/backend/storage/qdrant_storage:/qdrant/storage \
   qdrant/qdrant
 ```
+
+#### 3. Start Backend
 
 ```bash
 # Backend setup
@@ -95,8 +104,11 @@ source .venv/bin/activate
 
 pip install -r requirements.txt
 uvicorn backend.main:app --reload
+```
 
-# Frontend setup
+#### 4. Start Frontend
+
+```bash
 cd ../frontend
 npm install
 npm run dev
@@ -122,22 +134,49 @@ Create a `.env` file in the **project root**:
 ## Usage
 
 1. Open the frontend in your browser at [http://localhost:8080](http://localhost:8080).
-2. Start the Agent 
-3. Register / Login
-4. Use your own or create a workspace
-5. Select your preferred report language in the dashboard.
-6. Upload a Document via the Upload Zone.  
-7. Wait for AI processing (status shown in sidebar).  
-8. Click on the document to view the generated report.  
-9. Use the chat panel to ask specific questions about the document.
+2. Register or login
+3. Use your own or create a workspace
+4. Select your preferred report language in the dashboard.
+5. Upload a document (PDF, CSV, DOCX, TXT)  
+6. Wait for AI processing (status shown in sidebar).  
+7. Click on the document to view the generated report.  
+8. Ask questions about uploaded documents in the chat
 
 ## Tech Stack
 - Frontend: React, TypeScript, Tailwind CSS, Framer Motion
 - Backend: Python, FastAPI, Pydantic
 - AI: OpenAI API (primary LLM), Google Gemini (automatic fallback), Retrieval-Augmented Generation (RAG), Langfuse (LLM observability)
 - Vector Storage: **Qdrant**
+- Observability: Langfuse
+- Authentication: JWT
 - Database: SQLite (default) / PostgreSQL (configurable)
 - State Management: React Hooks & Context
+
+## Architecture
+```
+User
+ │
+ ▼
+Frontend (React)
+ │
+ ▼
+FastAPI Backend
+ │
+ ├── Document Processing Pipeline
+ │      Parsing → Chunking → Embedding
+ │
+ ├── Vector Search
+ │      Qdrant
+ │
+ ├── Retrieval Layer
+ │      Hybrid (Vector + Keyword)
+ │
+ ▼
+LLM
+ │
+ ▼
+AI Reports & Chat
+```
 
 ## Roadmap (Planned Features)
 - API-connected data ingestion
