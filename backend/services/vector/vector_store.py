@@ -45,7 +45,7 @@ def ensure_collection(vector_size: int):
     _COLLECTION_READY = True
 
 
-def upsert_document_chunks(document_id: int, chunks: List[Dict], batch_size: int = 512):
+def upsert_document_chunks(document_id: int, workspace_id: int, chunks: List[Dict], batch_size: int = 512):
     if not chunks:
         return
 
@@ -93,6 +93,7 @@ def upsert_document_chunks(document_id: int, chunks: List[Dict], batch_size: int
         payloads.append(
             {
                 "document_id": document_id,
+                "workspace_id": workspace_id,
                 "chunk_db_id": c["id"],
                 "_text": c["text"],
                 "chunk_index": md.get("chunk_index"),

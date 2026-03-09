@@ -2,10 +2,13 @@ from backend.services.vector.vector_store import client, COLLECTION_NAME
 from backend.services.llm.llm_provider import embed_texts
 from backend.database.database import SessionLocal
 from backend.models.document_chunk import DocumentChunk
+from backend.models.document import Document
+
+from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 from sqlalchemy import or_
 
-def search_chunks(query: str, limit: int = 8):
+def search_chunks(query: str, workspace_id: int, limit: int = 8):
     """
     Hybrid Retrieval:
     - Vector Search (Qdrant)
@@ -20,7 +23,15 @@ def search_chunks(query: str, limit: int = 8):
         collection_name=COLLECTION_NAME,
         query=vector,
         limit=limit,
-        with_payload=True
+        with_payload=True,
+        query_filter=Filter(
+            must=[
+                FieldCondition(
+                    key="workspace_id",
+                    match=MatchValue(value=workspace_id)
+                )
+            ]
+        )
     )
 
     points = getattr(results, "points", [])
@@ -49,7 +60,9 @@ def search_chunks(query: str, limit: int = 8):
         if keywords:
             rows = (
                 db.query(DocumentChunk)
+                .join(Document, DocumentChunk.document_id == Document.id)
                 .filter(
+                    Document.workspace_id == workspace_id,
                     or_(
                         *[
                             DocumentChunk.text.ilike(f"%{kw}%")
@@ -69,7 +82,7 @@ def search_chunks(query: str, limit: int = 8):
                 "document_id": r.document_id,
                 "page": getattr(r, "page_start", None),
                 "section": getattr(r, "section_title", None),
-                "score": 0.5,
+                "score": 0.65,
                 "source": "keyword"
             })
 

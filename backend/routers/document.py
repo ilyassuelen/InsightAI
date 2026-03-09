@@ -55,14 +55,14 @@ def set_status(db, document, status: str):
     db.refresh(document)
 
 
-def upsert_chunks_to_vectorstore(db, document_id: int):
+def upsert_chunks_to_vectorstore(db, document):
     """
     Loads document chunks from the database and inserts them into the vector database after embedding.
     This ensures that newly processed document chunks become searchable via semantic vector search.
     """
     chunks = (
         db.query(DocumentChunk)
-        .filter(DocumentChunk.document_id == document_id)
+        .filter(DocumentChunk.document_id == document.id)
         .order_by(DocumentChunk.chunk_index)
         .all()
     )
@@ -81,7 +81,7 @@ def upsert_chunks_to_vectorstore(db, document_id: int):
             "keywords": (chunk.keywords or []) if hasattr(chunk, "keywords") else []
         })
     if payload:
-        upsert_document_chunks(document_id=document_id, chunks=payload)
+        upsert_document_chunks(document_id=document.id, workspace_id=document.workspace_id, chunks=payload)
 
 
 # -------------------- PROCESS LOGIC --------------------
@@ -145,8 +145,7 @@ async def process_document_logic(document_id: int):
 
             set_status(db, document, "embedding")
 
-            # Upsert chunks to qdrant
-            upsert_chunks_to_vectorstore(db, document.id)
+            upsert_chunks_to_vectorstore(db, document)
 
             set_status(db, document, "blocking")
 
@@ -188,7 +187,7 @@ async def process_document_logic(document_id: int):
 
             set_status(db, document, "embedding")
 
-            upsert_chunks_to_vectorstore(db, document.id)
+            upsert_chunks_to_vectorstore(db, document)
 
             set_status(db, document, "blocking")
 
@@ -226,7 +225,7 @@ async def process_document_logic(document_id: int):
 
             set_status(db, document, "embedding")
 
-            upsert_chunks_to_vectorstore(db, document.id)
+            upsert_chunks_to_vectorstore(db, document)
 
             set_status(db, document, "blocking")
 
@@ -247,7 +246,7 @@ async def process_document_logic(document_id: int):
 
             set_status(db, document, "embedding")
 
-            upsert_chunks_to_vectorstore(db, document.id)
+            upsert_chunks_to_vectorstore(db, document)
             logger.info(f"Embedding completed for document ID {document.id} ({total_chunks} chunks)")
 
             set_status(db, document, "blocking")

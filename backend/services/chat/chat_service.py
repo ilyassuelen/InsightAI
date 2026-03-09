@@ -76,7 +76,10 @@ async def generate_chat_response(
     )
 
     # -------- VECTOR SEARCH --------
-    chunks = search_chunks(message)
+    if workspace_id is None:
+        return "No workspace selected."
+
+    chunks = search_chunks(message, workspace_id)
 
     if not chunks:
         return "Sorry, I could not find relevant information in the uploaded documents."
@@ -198,7 +201,7 @@ Do NOT include sources in the answer.
     answer = answer.rstrip()
     answer += "\n\nSources\n────────\n"
 
-    for s in sorted(sources):
+    for s in unique_sources:
         answer += f"{s}\n"
 
     return answer
