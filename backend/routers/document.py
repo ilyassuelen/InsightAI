@@ -1,6 +1,4 @@
 from fastapi import APIRouter, UploadFile, HTTPException, Body, BackgroundTasks, File, Form, Depends
-from pathlib import Path
-from uuid import uuid4
 import logging
 
 from backend.database.database import SessionLocal
@@ -22,7 +20,10 @@ from backend.services.ingestion.document_block_service import create_blocks_from
 from backend.services.ingestion.structured_block_service import structure_blocks
 from backend.services.reporting.report_service import generate_report_for_document
 from backend.services.ingestion.csv_block_service import create_blocks_from_csv_rows
+
 from backend.services.vector.vector_store import upsert_document_chunks, delete_document_chunks
+
+from backend.services.storage.r2_storage import upload_file, download_to_temp_file, delete_file
 
 from backend.services.auth.deps import get_current_user
 from backend.models.user import User
@@ -103,6 +104,8 @@ async def process_document_logic(document_id: int):
 
     db = SessionLocal()
     document = None
+    local_file = None
+
     logger.info(f"Start processing document {document_id}")
 
     try:
@@ -111,7 +114,10 @@ async def process_document_logic(document_id: int):
             logger.error(f"Document {document_id} not found")
             return
 
-        # Clear existing chunks + vectorstore for this document
+        # Download from R2
+        local_file = download_to_temp_file(document.storage_path)
+
+        # Clear existing chunks + vectorstore
         db.query(DocumentChunk) \
             .filter(DocumentChunk.document_id == document.id) \
             .delete()
@@ -127,7 +133,7 @@ async def process_document_logic(document_id: int):
         if document.file_type in ("text/csv", "application/csv"):
             set_status(db, document, "parsing")
 
-            rows_iter = iter_csv_rows(document.storage_path)
+            rows_iter = iter_csv_rows(local_file)
 
             set_status(db, document, "chunking")
 
@@ -151,7 +157,7 @@ async def process_document_logic(document_id: int):
 
             # Blocks
             rows_for_blocks = []
-            for i, row in enumerate(iter_csv_rows(document.storage_path)):
+            for i, row in enumerate(iter_csv_rows(local_file)):
                 rows_for_blocks.append(row)
                 if i >= 3000:  # safety cap for huge CSVs
                     break
@@ -166,7 +172,7 @@ async def process_document_logic(document_id: int):
         elif document.file_type in ("text/plain", "text/markdown"):
             set_status(db, document, "parsing")
 
-            full_text = parse_txt(document.storage_path)
+            full_text = parse_txt(local_file)
 
             if not full_text.strip():
                 set_status(db, document, "parsed_empty")
@@ -203,7 +209,7 @@ async def process_document_logic(document_id: int):
         ):
             set_status(db, document, "parsing")
 
-            full_text = parse_docx(document.storage_path)
+            full_text = parse_docx(local_file)
 
             if not full_text.strip():
                 set_status(db, document, "parsed_empty")
@@ -241,7 +247,7 @@ async def process_document_logic(document_id: int):
 
             parse_id, total_chunks = chunk_pdf(
                 document_id=document.id,
-                pdf_path=document.storage_path,
+                pdf_path=local_file,
             )
 
             set_status(db, document, "embedding")
@@ -284,6 +290,9 @@ async def process_document_logic(document_id: int):
         logger.exception(f"Document {document_id} processing failed: {e}")
 
     finally:
+        if local_file and local_file.exists():
+            local_file.unlink()
+
         db.close()
         logger.info(f"Finished processing document {document_id}")
 
@@ -334,16 +343,11 @@ async def upload_document(
     current_user: User = Depends(get_current_user),
 ):
 
-    storage_dir = Path("backend/storage/documents")
-    storage_dir.mkdir(parents=True, exist_ok=True)
-
-    unique_filename = f"{uuid4()}_{file.filename}"
-    filepath = storage_dir / unique_filename
-
     db = SessionLocal()
     try:
-        with open(filepath, "wb") as f:
-            f.write(await file.read())
+        file_bytes = await file.read()
+
+        storage_key = upload_file(file_bytes, file.filename)
 
         # Default: personal workspace
         if workspace_id is None:
@@ -356,7 +360,7 @@ async def upload_document(
         document = Document(
             filename=file.filename,
             file_type=file.content_type,
-            storage_path=str(filepath),
+            storage_path=storage_key,
             file_status="uploaded",
             language=(language or "de").strip(),
             workspace_id=workspace_id,
@@ -381,8 +385,7 @@ async def upload_document(
     except Exception as e:
         db.rollback()
         logger.exception(f"Upload failed: {e}")
-        if filepath.exists():
-            filepath.unlink()
+
         raise HTTPException(status_code=500, detail="Document upload failed")
     finally:
         await file.close()
@@ -475,21 +478,19 @@ def delete_document(id: int, current_user: User = Depends(get_current_user)):
     db = SessionLocal()
     try:
         document = db.query(Document).filter(Document.id == id).first()
+
         if not document:
             raise HTTPException(status_code=404, detail="Document not found")
 
         if not user_has_access_to_document(db, current_user.id, document):
             raise HTTPException(status_code=403, detail="Forbidden")
 
-        # -------- DELETE EMBEDDINGS FROM QDRANT --------
         delete_document_chunks(id)
 
-        # -------- DELETE LOCAL FILE --------
-        filepath = Path(document.storage_path)
-        if filepath.exists():
-            filepath.unlink()
+        delete_file(document.storage_path)
 
         db.delete(document)
+
         db.commit()
 
         return {"message": f"Document with ID: {id} deleted successfully"}
