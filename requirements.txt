@@ -15,4 +15,4 @@ python-jose[cryptography]
 langfuse
 pymupdf
 boto3
-psycopg[binary]
+psycopg2-binary
