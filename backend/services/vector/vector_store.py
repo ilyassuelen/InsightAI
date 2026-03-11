@@ -12,9 +12,10 @@ from backend.services.llm.llm_provider import embed_texts as embed_texts_openai
 logger = logging.getLogger(__name__)
 
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "insightai_chunks")
 
-client = QdrantClient(url=QDRANT_URL)
+client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY,)
 
 # Cache: If the collection exists, stop calling get_collections()
 _COLLECTION_READY = False
@@ -50,7 +51,6 @@ def upsert_document_chunks(document_id: int, workspace_id: int, chunks: List[Dic
         return
 
     texts = [c["text"] for c in chunks]
-
     vectors = embed_texts_openai(texts)
 
     if not vectors or not vectors[0]:
@@ -80,7 +80,6 @@ def upsert_document_chunks(document_id: int, workspace_id: int, chunks: List[Dic
             f"[Qdrant] Delete-by-filter failed for document_id={document_id}: {e}"
         )
 
-    # IDs
     ids = [
         str(uuid.uuid5(uuid.NAMESPACE_URL, f"doc{document_id}_chunk{c['id']}"))
         for c in chunks

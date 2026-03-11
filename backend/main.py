@@ -1,20 +1,22 @@
-from dotenv import load_dotenv
-load_dotenv()
+import os
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+load_dotenv()
 
 from backend.routers import auth, user, document, report, chat, session, ai, workspace
 import backend.database.init_db
 
 app = FastAPI(title="InsightAI")
 
-# --- CORS Middleware ---
-origins = [
-    "http://localhost:8080",
-    "http://localhost:8081",
-    "http://localhost:5173",
-]
+cors_origins_raw = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:8080, http://localhost:8081, http://localhost:5173"
+)
+
+origins = [origin.strip() for origin in cors_origins_raw.split(",") if origin.strip()]
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,4 +40,3 @@ app.include_router(workspace.router)
 @app.get("/")
 def root():
     return {"message": "InsightAI is running!"}
-

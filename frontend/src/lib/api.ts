@@ -1,12 +1,11 @@
 import { getAccessToken, clearAccessToken } from "@/lib/auth";
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:8000";
 
 export async function apiFetch(path: string, options: RequestInit = {}) {
   const token = getAccessToken();
 
   const headers = new Headers(options.headers || {});
-  // Only set if not already set
   if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
