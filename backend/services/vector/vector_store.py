@@ -31,18 +31,34 @@ def ensure_collection(vector_size: int):
         return
 
     existing = [c.name for c in client.get_collections().collections]
-    if COLLECTION_NAME in existing:
-        _COLLECTION_READY = True
-        return
 
-    client.create_collection(
-        collection_name=COLLECTION_NAME,
-        vectors_config=qmodels.VectorParams(
-            size=vector_size,
-            distance=qmodels.Distance.COSINE,
-        ),
-    )
-    logger.info(f"[Qdrant] Created collection: {COLLECTION_NAME}")
+    if COLLECTION_NAME not in existing:
+        client.create_collection(
+            collection_name=COLLECTION_NAME,
+            vectors_config=qmodels.VectorParams(
+                size=vector_size,
+                distance=qmodels.Distance.COSINE,
+            ),
+        )
+        logger.info(f"[Qdrant] Created collection: {COLLECTION_NAME}")
+
+    try:
+        client.create_payload_index(
+            collection_name=COLLECTION_NAME,
+            field_name="document_id",
+            field_schema=qmodels.PayloadSchemaType.INTEGER,
+        )
+
+        client.create_payload_index(
+            collection_name=COLLECTION_NAME,
+            field_name="workspace_id",
+            field_schema=qmodels.PayloadSchemaType.INTEGER,
+        )
+
+        logger.info("[Qdrant] Ensured payload index for document_id")
+    except Exception:
+        pass
+
     _COLLECTION_READY = True
 
 
