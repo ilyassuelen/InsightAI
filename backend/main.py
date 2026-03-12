@@ -7,7 +7,6 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()
 
 from backend.routers import auth, user, document, report, chat, session, ai, workspace
-import backend.database.init_db
 
 app = FastAPI(title="InsightAI")
 
@@ -35,6 +34,11 @@ app.include_router(session.router, prefix="/sessions")
 app.include_router(ai.router, prefix="/ai")
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(workspace.router)
+
+
+@app.on_event("startup")
+def startup():
+    import backend.database.init_db
 
 
 @app.get("/")
