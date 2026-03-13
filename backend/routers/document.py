@@ -10,19 +10,6 @@ from backend.parsers.csv_parser import iter_csv_rows
 from backend.parsers.txt_parser import parse_txt
 from backend.parsers.docx_parser import parse_docx
 
-from backend.services.ingestion.chunking_service import (
-    chunk_text_from_text,
-    chunk_csv_stream,
-    chunk_pdf,
-    MAX_TOKENS
-)
-from backend.services.ingestion.document_block_service import create_blocks_from_chunks
-from backend.services.ingestion.structured_block_service import structure_blocks
-from backend.services.reporting.report_service import generate_report_for_document
-from backend.services.ingestion.csv_block_service import create_blocks_from_csv_rows
-
-from backend.services.vector.vector_store import upsert_document_chunks, delete_document_chunks
-
 from backend.services.storage.r2_storage import upload_file, download_to_temp_file, delete_file
 
 from backend.services.auth.deps import get_current_user
@@ -32,6 +19,34 @@ from backend.models.workspace_member import WorkspaceMember
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+# -------------------- LAZY IMPORT HELPERS --------------------
+def get_chunking_services():
+    from backend.services.ingestion.chunking_service import (
+        chunk_text_from_text,
+        chunk_csv_stream,
+        chunk_pdf,
+        MAX_TOKENS
+    )
+    return chunk_text_from_text, chunk_csv_stream, chunk_pdf, MAX_TOKENS
+
+
+def get_block_services():
+    from backend.services.ingestion.document_block_service import create_blocks_from_chunks
+    from backend.services.ingestion.csv_block_service import create_blocks_from_csv_rows
+    from backend.services.ingestion.structured_block_service import structure_blocks
+    return create_blocks_from_chunks, create_blocks_from_csv_rows, structure_blocks
+
+
+def get_vector_services():
+    from backend.services.vector.vector_store import upsert_document_chunks, delete_document_chunks
+    return upsert_document_chunks, delete_document_chunks
+
+
+def get_report_service():
+    from backend.services.reporting.report_service import generate_report_for_document
+    return generate_report_for_document
 
 
 # -------------------- ACCESS CONTROL --------------------
@@ -61,6 +76,8 @@ def upsert_chunks_to_vectorstore(db, document):
     Loads document chunks from the database and inserts them into the vector database after embedding.
     This ensures that newly processed document chunks become searchable via semantic vector search.
     """
+    upsert_document_chunks, _ = get_vector_services()
+
     chunks = (
         db.query(DocumentChunk)
         .filter(DocumentChunk.document_id == document.id)
@@ -101,6 +118,11 @@ async def process_document_logic(document_id: int):
     Supported file types:
     - PDF, CSV, TXT and DOCX
     """
+
+    chunk_text_from_text, chunk_csv_stream, chunk_pdf, MAX_TOKENS = get_chunking_services()
+    create_blocks_from_chunks, create_blocks_from_csv_rows, structure_blocks = get_block_services()
+    generate_report_for_document = get_report_service()
+    upsert_document_chunks, delete_document_chunks = get_vector_services()
 
     db = SessionLocal()
     document = None
@@ -485,6 +507,7 @@ def delete_document(id: int, current_user: User = Depends(get_current_user)):
         if not user_has_access_to_document(db, current_user.id, document):
             raise HTTPException(status_code=403, detail="Forbidden")
 
+        _, delete_document_chunks = get_vector_services()
         delete_document_chunks(id)
 
         delete_file(document.storage_path)
