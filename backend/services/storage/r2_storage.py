@@ -74,6 +74,27 @@ def download_to_temp_file(key: str) -> Path:
     return path
 
 
+def copy_file(source_key: str, filename: str) -> str:
+    """
+    Copies an existing object inside the R2 bucket and returns the new storage key.
+    This prevents copied documents from sharing the same physical object,
+    so deleting one document will not break the other.
+    """
+    target_key = generate_storage_key(filename)
+
+    logger.info(f"Copying object in R2 → source={source_key}, target={target_key}")
+
+    s3_client.copy_object(
+        Bucket=R2_BUCKET,
+        Key=target_key,
+        CopySource={"Bucket": R2_BUCKET, "Key": source_key},
+    )
+
+    logger.info(f"Copy successful → key={target_key}")
+
+    return target_key
+
+
 def delete_file(key: str):
     """
     Deletes a file from R2.

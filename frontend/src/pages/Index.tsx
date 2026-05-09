@@ -52,11 +52,10 @@ const Index = () => {
     uploadDocument,
     selectDocument,
     error,
-    refreshDocuments,
+    transferDocument,
     resetState,
   } = useDocuments(currentWorkspace?.id);
 
-  // Auto-login on refresh (if token exists and /auth/me passes)
   useEffect(() => {
     const boot = async () => {
       if (!isAuthenticated()) return;
@@ -99,7 +98,6 @@ const Index = () => {
   };
 
   const handleWorkspaceSwitch = (workspaceId: string) => {
-    // Clear current UI immediately to avoid showing old user's/documents
     resetState();
     switchWorkspace(workspaceId);
   };
@@ -114,7 +112,6 @@ const Index = () => {
     await deleteWorkspace(workspaceId);
   };
 
-  // -------------------- LANDING --------------------
   if (view === "landing") {
     return (
       <div className="min-h-screen bg-background">
@@ -133,13 +130,11 @@ const Index = () => {
     );
   }
 
-  // -------------------- APP DASHBOARD --------------------
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Header
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         onLogout={handleLogout}
-        // Workspace props
         workspaces={workspaces}
         currentWorkspace={currentWorkspace}
         isWorkspaceOwner={isOwner}
@@ -152,7 +147,6 @@ const Index = () => {
       />
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Desktop Sidebar */}
         <AnimatePresence>
           {sidebarOpen && (
             <motion.div
@@ -167,12 +161,14 @@ const Index = () => {
                 setDocuments={setDocuments}
                 selectedDocument={selectedDocument}
                 onSelectDocument={selectDocument}
+                currentWorkspace={currentWorkspace}
+                workspaces={workspaces}
+                onTransferDocument={transferDocument}
               />
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Mobile sidebar overlay */}
         <AnimatePresence>
           {sidebarOpen && (
             <motion.div
@@ -200,13 +196,15 @@ const Index = () => {
                     selectDocument(doc);
                     setSidebarOpen(false);
                   }}
+                  currentWorkspace={currentWorkspace}
+                  workspaces={workspaces}
+                  onTransferDocument={transferDocument}
                 />
               </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Main Content */}
         <main className="flex-1 flex overflow-hidden">
           <div
             className={cn(
@@ -214,17 +212,14 @@ const Index = () => {
               showChat && "lg:mr-0"
             )}
           >
-            {/* Background decoration */}
             <div className="absolute inset-0 ai-dots opacity-10 pointer-events-none" />
 
             <div className="max-w-4xl mx-auto space-y-10 relative z-10">
-              {/* Upload Section */}
               <section>
                 <UploadZone onUpload={uploadDocument} />
                 {error && <p className="text-xs text-error mt-3">{error}</p>}
               </section>
 
-              {/* Process Steps */}
               <section>
                 <div className="flex items-center gap-2 mb-6">
                   <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
@@ -237,7 +232,6 @@ const Index = () => {
                 <ProcessSteps />
               </section>
 
-              {/* Report Section */}
               <section>
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2">
@@ -271,7 +265,6 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Chat Panel */}
           <AnimatePresence>
             {showChat && (
               <motion.div

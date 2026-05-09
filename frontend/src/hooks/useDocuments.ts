@@ -183,6 +183,47 @@ export function useDocuments(workspaceId?: string | number | null) {
     }
   }, []);
 
+  // ---------------- Transfer Document ----------------
+  const transferDocument = useCallback(async (
+    documentId: number,
+    targetWorkspaceId: string | number,
+    mode: "copy" | "move" = "copy"
+  ) => {
+    setError(null);
+
+    const response = await apiFetch(`/documents/${documentId}/transfer`, {
+      method: "POST",
+      body: JSON.stringify({
+        target_workspace_id: Number(targetWorkspaceId),
+        mode,
+      }),
+    });
+
+    let data: any = null;
+
+    try {
+      data = await response.json();
+    } catch {
+      data = null;
+    }
+
+    if (!response.ok) {
+      throw new Error(data?.detail || "Document transfer failed");
+    }
+
+    // Remove locally if moved away
+    if (mode === "move") {
+      setDocuments(prev => prev.filter(doc => doc.id !== documentId));
+
+      if (selectedDocument?.id === documentId) {
+        setSelectedDocument(null);
+        setReport(null);
+      }
+    }
+
+    return data;
+  }, [selectedDocument]);
+
   // ---------------- Load all documents on mount ----------------
   useEffect(() => {
       refreshDocuments();
@@ -198,6 +239,7 @@ export function useDocuments(workspaceId?: string | number | null) {
     uploadDocument,
     selectDocument,
     refreshDocuments,
+    transferDocument,
     resetState,
   };
 }

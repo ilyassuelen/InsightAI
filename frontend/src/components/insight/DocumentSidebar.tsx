@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   FileText,
@@ -11,9 +12,14 @@ import {
   Layers,
   Cpu,
   Grid,
-  Brain
+  Brain,
+  Copy,
+  MoveRight,
 } from "lucide-react";
+
 import { Document, DocumentStatus } from "@/types/document";
+import type { Workspace } from "@/types/workspace";
+
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
 
@@ -22,6 +28,13 @@ interface DocumentSidebarProps {
   selectedDocument: Document | null;
   onSelectDocument: (doc: Document | null) => void;
   setDocuments: (docs: Document[]) => void;
+  currentWorkspace: Workspace | null;
+  workspaces: Workspace[];
+  onTransferDocument: (
+    documentId: number,
+    targetWorkspaceId: string,
+    mode: "copy" | "move"
+  ) => Promise<void>;
 }
 
 type StatusUI = {
@@ -32,84 +45,72 @@ type StatusUI = {
 };
 
 const statusConfig: Record<DocumentStatus, StatusUI> = {
-
   uploaded: {
     icon: Loader2,
     className: "text-muted-foreground animate-spin",
     label: "Uploaded",
     bgClass: "bg-muted/60",
   },
-
   processing: {
     icon: Clock,
     className: "text-processing animate-pulse",
     label: "Processing",
     bgClass: "bg-processing/10",
   },
-
   parsing: {
     icon: FileText,
     className: "text-blue-500 animate-pulse",
     label: "Parsing document",
     bgClass: "bg-blue-500/10",
   },
-
   chunking: {
     icon: Layers,
     className: "text-indigo-500 animate-pulse",
     label: "Creating chunks",
     bgClass: "bg-indigo-500/10",
   },
-
   embedding: {
     icon: Cpu,
     className: "text-cyan-500 animate-pulse",
     label: "Creating embeddings",
     bgClass: "bg-cyan-500/10",
   },
-
   blocking: {
     icon: Grid,
     className: "text-yellow-500 animate-pulse",
     label: "Creating blocks",
     bgClass: "bg-yellow-500/10",
   },
-
   structuring: {
     icon: Brain,
     className: "text-purple-500 animate-pulse",
     label: "Structuring content",
     bgClass: "bg-purple-500/10",
   },
-
   report_generating: {
     icon: Loader2,
     className: "text-purple-500 animate-spin",
     label: "Generating report",
     bgClass: "bg-purple-500/10",
   },
-
   reporting: {
     icon: Loader2,
     className: "text-purple-500 animate-spin",
     label: "Generating report",
     bgClass: "bg-purple-500/10",
   },
-
   completed: {
     icon: CheckCircle,
     className: "text-success",
     label: "Completed",
     bgClass: "bg-success/10",
   },
-
   failed: {
     icon: AlertCircle,
     className: "text-error",
     label: "Processing failed",
     bgClass: "bg-error/10",
   },
-
   parsed_empty: {
     icon: AlertCircle,
     className: "text-muted-foreground",
@@ -123,8 +124,23 @@ export function DocumentSidebar({
   selectedDocument,
   onSelectDocument,
   setDocuments,
+  currentWorkspace,
+  workspaces,
+  onTransferDocument,
 }: DocumentSidebarProps) {
+  const [contextMenu, setContextMenu] = useState<{
+    doc: Document;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const targetTeamWorkspaces = workspaces.filter(
+    (workspace) => !workspace.isPersonal && workspace.id !== currentWorkspace?.id
+  );
+
   const handleRename = async (doc: Document) => {
+    setContextMenu(null);
+
     const newName = prompt("Enter new filename:", doc.filename);
     if (!newName || newName.trim() === "" || newName === doc.filename) return;
 
@@ -155,6 +171,8 @@ export function DocumentSidebar({
   };
 
   const handleDelete = async (id: number) => {
+    setContextMenu(null);
+
     if (!confirm("Are you sure you want to delete this document?")) return;
 
     try {
@@ -175,7 +193,6 @@ export function DocumentSidebar({
         );
       }
 
-      // Update sidebar immediately
       setDocuments(documents.filter((d) => d.id !== id));
 
       if (selectedDocument?.id === id) {
@@ -187,9 +204,32 @@ export function DocumentSidebar({
     }
   };
 
+  const handleTransfer = async (
+    doc: Document,
+    targetWorkspaceId: string,
+    mode: "copy" | "move"
+  ) => {
+    setContextMenu(null);
+
+    try {
+      await onTransferDocument(doc.id, targetWorkspaceId, mode);
+
+      alert(
+        mode === "copy"
+          ? "Document copied successfully."
+          : "Document moved successfully."
+      );
+    } catch (err: any) {
+      console.error(err);
+      alert(err?.message || "Document transfer failed");
+    }
+  };
+
   return (
-    <aside className="w-full h-full flex flex-col bg-sidebar border-r border-sidebar-border">
-      {/* Header */}
+    <aside
+      className="w-full h-full flex flex-col bg-sidebar border-r border-sidebar-border relative"
+      onClick={() => setContextMenu(null)}
+    >
       <div className="p-5 border-b border-sidebar-border">
         <div className="flex items-center gap-3 mb-1">
           <div className="p-2 rounded-lg bg-primary/10">
@@ -204,7 +244,6 @@ export function DocumentSidebar({
         </p>
       </div>
 
-      {/* Document list */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {documents.length === 0 ? (
           <motion.div
@@ -235,6 +274,7 @@ export function DocumentSidebar({
 
             const StatusIcon = status.icon;
             const isSelected = selectedDocument?.id === doc.id;
+            const showStatus = doc.file_status !== "completed";
 
             return (
               <motion.div
@@ -242,52 +282,56 @@ export function DocumentSidebar({
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: index * 0.05, duration: 0.3 }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenu({
+                    doc,
+                    x: e.clientX,
+                    y: e.clientY,
+                  });
+                }}
                 className={cn(
-                  "w-full rounded-xl transition-all duration-200",
+                  "w-full rounded-xl transition-all duration-200 cursor-pointer",
                   "hover:bg-sidebar-accent group",
                   isSelected &&
                     "bg-sidebar-accent ring-1 ring-primary/30 shadow-lg shadow-primary/5"
                 )}
               >
-                <div className="w-full flex items-start gap-3 p-4">
-                  {/* Main clickable area */}
-                  <button
-                    onClick={() => onSelectDocument(doc)}
-                    className="flex-1 flex items-start gap-3 text-left min-w-0"
-                    title={doc.filename}
+                <button
+                  onClick={() => onSelectDocument(doc)}
+                  className="w-full flex items-start gap-3 text-left min-w-0 p-4"
+                  title={doc.filename}
+                >
+                  <div
+                    className={cn(
+                      "p-2 rounded-lg transition-colors shrink-0",
+                      isSelected ? "bg-primary/20" : "bg-muted group-hover:bg-primary/10"
+                    )}
                   >
-                    {/* File icon */}
-                    <div
+                    <FileText
                       className={cn(
-                        "p-2 rounded-lg transition-colors shrink-0",
-                        isSelected ? "bg-primary/20" : "bg-muted group-hover:bg-primary/10"
+                        "h-4 w-4",
+                        isSelected
+                          ? "text-primary"
+                          : "text-muted-foreground group-hover:text-primary"
+                      )}
+                    />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className={cn(
+                        "text-sm font-medium leading-snug break-words line-clamp-2 transition-colors",
+                        isSelected
+                          ? "text-foreground"
+                          : "text-sidebar-foreground group-hover:text-foreground"
                       )}
                     >
-                      <FileText
-                        className={cn(
-                          "h-4 w-4",
-                          isSelected
-                            ? "text-primary"
-                            : "text-muted-foreground group-hover:text-primary"
-                        )}
-                      />
-                    </div>
+                      {doc.filename}
+                    </p>
 
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <p
-                        className={cn(
-                          "text-sm font-medium truncate transition-colors",
-                          isSelected
-                            ? "text-foreground"
-                            : "text-sidebar-foreground group-hover:text-foreground"
-                        )}
-                        style={{ maxWidth: "20ch" }}
-                      >
-                        {doc.filename}
-                      </p>
-
-                      <div className="flex items-center gap-2 mt-1.5">
+                    {showStatus && (
+                      <div className="flex items-center gap-2 mt-2">
                         <span
                           className={cn(
                             "px-2 py-0.5 rounded-full text-[10px] font-medium border",
@@ -301,43 +345,77 @@ export function DocumentSidebar({
                           </span>
                         </span>
                       </div>
-                    </div>
-                  </button>
-
-                  {/* Actions (Rename/Delete) */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRename(doc);
-                      }}
-                      className="p-2 rounded-lg hover:bg-muted transition-colors"
-                      title="Rename document"
-                      aria-label="Rename document"
-                    >
-                      <Pencil className="w-4 h-4 text-muted-foreground" />
-                    </button>
-
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(doc.id);
-                      }}
-                      className="p-2 rounded-lg hover:bg-red-500/10 transition-colors"
-                      title="Delete document"
-                      aria-label="Delete document"
-                    >
-                      <Delete className="w-4 h-4 text-red-500" />
-                    </button>
+                    )}
                   </div>
-                </div>
+                </button>
               </motion.div>
             );
           })
         )}
       </div>
 
-      {/* Footer decoration */}
+      {contextMenu && (
+        <div
+          className="fixed z-[9999] w-64 rounded-xl border border-border bg-background/95 backdrop-blur-xl shadow-2xl p-2"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => handleRename(contextMenu.doc)}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left hover:bg-muted transition-colors"
+          >
+            <Pencil className="w-4 h-4 text-muted-foreground" />
+            Rename document
+          </button>
+
+          {currentWorkspace?.isPersonal && targetTeamWorkspaces.length > 0 && (
+            <>
+              <div className="my-2 h-px bg-border" />
+
+              <p className="px-3 py-1 text-[11px] uppercase tracking-wider text-muted-foreground">
+                Copy to team
+              </p>
+
+              {targetTeamWorkspaces.map((workspace) => (
+                <button
+                  key={`copy-${workspace.id}`}
+                  onClick={() => handleTransfer(contextMenu.doc, workspace.id, "copy")}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left hover:bg-muted transition-colors"
+                >
+                  <Copy className="w-4 h-4 text-blue-400" />
+                  {workspace.name}
+                </button>
+              ))}
+
+              <p className="px-3 py-1 mt-2 text-[11px] uppercase tracking-wider text-muted-foreground">
+                Move to team
+              </p>
+
+              {targetTeamWorkspaces.map((workspace) => (
+                <button
+                  key={`move-${workspace.id}`}
+                  onClick={() => handleTransfer(contextMenu.doc, workspace.id, "move")}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left hover:bg-muted transition-colors"
+                >
+                  <MoveRight className="w-4 h-4 text-yellow-400" />
+                  {workspace.name}
+                </button>
+              ))}
+            </>
+          )}
+
+          <div className="my-2 h-px bg-border" />
+
+          <button
+            onClick={() => handleDelete(contextMenu.doc.id)}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left hover:bg-red-500/10 text-red-500 transition-colors"
+          >
+            <Delete className="w-4 h-4" />
+            Delete document
+          </button>
+        </div>
+      )}
+
       <div className="h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
     </aside>
   );
