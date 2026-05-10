@@ -3,11 +3,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronRight,
   FileText,
-  Hash,
   Loader2,
   Sparkles,
   BarChart3,
 } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import { Report, ReportSection } from "@/types/report";
 
@@ -37,13 +37,17 @@ function formatUnit(unit: string | undefined): string {
   return unit;
 }
 
-function CollapsibleSection({ section, index }: CollapsibleSectionProps) {
+function CollapsibleSection({
+  section,
+  index,
+}: CollapsibleSectionProps) {
   const [isOpen, setIsOpen] = useState(index === 0);
 
   const formatContent = (content: unknown): string => {
     if (content === null || content === undefined) return "";
     if (typeof content === "string") return content;
     if (typeof content === "number") return String(content);
+
     try {
       return JSON.stringify(content, null, 2);
     } catch {
@@ -53,26 +57,32 @@ function CollapsibleSection({ section, index }: CollapsibleSectionProps) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
-      className="rounded-xl overflow-hidden glass"
+      className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] backdrop-blur-xl"
     >
       <button
         onClick={() => setIsOpen((v) => !v)}
-        className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left group"
+        className="group flex w-full items-center justify-between px-6 py-5 text-left transition-all hover:bg-white/[0.03]"
       >
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-mono px-2 py-1 rounded-md bg-muted text-muted-foreground">
+        <div className="flex items-center gap-4">
+          <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] text-xs font-semibold text-white/70">
             {String(index + 1).padStart(2, "0")}
-          </span>
-          <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
-            {section.heading ?? "Untitled"}
-          </span>
+          </div>
+
+          <div>
+            <p className="text-base font-medium text-white transition-colors group-hover:text-primary">
+              {section.heading || "Untitled Section"}
+            </p>
+          </div>
         </div>
 
-        <motion.div animate={{ rotate: isOpen ? 90 : 0 }} transition={{ duration: 0.2 }}>
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        <motion.div
+          animate={{ rotate: isOpen ? 90 : 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <ChevronRight className="h-5 w-5 text-white/40" />
         </motion.div>
       </button>
 
@@ -82,13 +92,15 @@ function CollapsibleSection({ section, index }: CollapsibleSectionProps) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.22 }}
             className="overflow-hidden"
           >
-            <div className="p-4 bg-muted/20 border-t border-border">
-              <pre className="text-xs font-mono text-foreground/90 whitespace-pre-wrap break-words overflow-x-auto leading-relaxed">
-                {formatContent(section.content)}
-              </pre>
+            <div className="border-t border-white/10 px-6 py-6">
+              <div className="prose prose-invert max-w-none">
+                <pre className="whitespace-pre-wrap break-words font-sans text-[15px] leading-8 text-white/80">
+                  {formatContent(section.content)}
+                </pre>
+              </div>
             </div>
           </motion.div>
         )}
@@ -97,147 +109,173 @@ function CollapsibleSection({ section, index }: CollapsibleSectionProps) {
   );
 }
 
-export function ReportViewer({ report, isLoading, documentName }: ReportViewerProps) {
+export function ReportViewer({
+  report,
+  isLoading,
+  documentName,
+}: ReportViewerProps) {
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-6">
-        <div className="relative">
-          <div className="p-6 rounded-2xl gradient-bg glow animate-pulse">
-            <Loader2 className="h-10 w-10 text-primary-foreground animate-spin" />
+      <div className="flex flex-col items-center justify-center py-28 text-center">
+        <div className="relative mb-8">
+          <div className="flex h-24 w-24 items-center justify-center rounded-[28px] bg-gradient-to-br from-primary to-cyan-400 shadow-2xl shadow-primary/30">
+            <Loader2 className="h-10 w-10 animate-spin text-white" />
           </div>
+
           <motion.div
-            initial={{ scale: 1, opacity: 0.5 }}
-            animate={{ scale: 1.5, opacity: 0 }}
-            transition={{ duration: 1.5, repeat: Infinity }}
-            className="absolute inset-0 rounded-2xl border-2 border-primary"
+            initial={{ scale: 1, opacity: 0.4 }}
+            animate={{ scale: 1.7, opacity: 0 }}
+            transition={{
+              duration: 1.8,
+              repeat: Infinity,
+            }}
+            className="absolute inset-0 rounded-[28px] border border-primary"
           />
         </div>
-        <div className="text-center">
-          <p className="text-lg font-display font-medium text-foreground mb-1">
-            Analyzing document...
-          </p>
-          <p className="text-sm text-muted-foreground">Extracting insights from your document</p>
-        </div>
+
+        <h2 className="mb-2 text-2xl font-semibold text-white">
+          Creating report
+        </h2>
+
+        <p className="max-w-md text-sm leading-7 text-white/50">
+          Your document is currently being analyzed and transformed into a
+          structured AI-generated report.
+        </p>
       </div>
     );
   }
 
   if (!report) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-6 text-center">
-        <div className="p-6 rounded-2xl bg-muted/50">
-          <FileText className="h-12 w-12 text-muted-foreground/40" />
+      <div className="flex flex-col items-center justify-center py-28 text-center">
+        <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-[28px] border border-white/10 bg-white/[0.03]">
+          <FileText className="h-10 w-10 text-white/30" />
         </div>
-        <div>
-          <p className="text-lg font-display font-medium text-foreground mb-2">
-            No report selected
-          </p>
-          <p className="text-sm text-muted-foreground max-w-sm">
-            Select a document from the sidebar to view its report.
-          </p>
-        </div>
+
+        <h2 className="mb-2 text-2xl font-semibold text-white">
+          No report selected
+        </h2>
+
+        <p className="max-w-md text-sm leading-7 text-white/50">
+          Select a completed document from the sidebar to open its report.
+        </p>
       </div>
     );
   }
 
-  // ✅ FIX: define keyFigures safely
-  const keyFigures = Array.isArray(report.key_figures) ? report.key_figures : [];
+  const keyFigures = Array.isArray(report.key_figures)
+    ? report.key_figures
+    : [];
 
-  const generatedLabel =
-    report.generated_at ? new Date(report.generated_at).toLocaleString() : "unknown";
+  const generatedLabel = report.generated_at
+    ? new Date(report.generated_at).toLocaleString()
+    : "unknown";
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <span className="text-xs font-medium text-primary uppercase tracking-wider">
-              Report for document:
-            </span>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="space-y-10"
+    >
+      {/* Hero */}
+      <section className="relative overflow-hidden rounded-[32px] border border-white/10 bg-gradient-to-br from-primary/15 via-white/[0.03] to-cyan-500/10 p-8">
+        <div className="absolute inset-0 ai-grid opacity-[0.08]" />
+
+        <div className="relative z-10">
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-xs font-medium uppercase tracking-[0.2em] text-primary">
+            <Sparkles className="h-3.5 w-3.5" />
+            Document summary
           </div>
-          <h2 className="text-2xl font-display font-bold text-foreground">
-            {documentName || "Document Report"}
-          </h2>
-          <p className="text-sm text-muted-foreground mt-1">Generated {generatedLabel}</p>
+
+          <p className="mt-4 max-w-3xl text-base leading-8 text-white/60">
+            {report.summary || "No summary available."}
+          </p>
+
+          <div className="mt-6 text-sm text-white/40">
+            Generated {generatedLabel}
+          </div>
         </div>
-      </div>
+      </section>
 
-      {/* Summary */}
-      {report.summary && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="p-6 rounded-xl glass-strong gradient-border"
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium text-primary">Summary</span>
-          </div>
-          <p className="text-foreground leading-relaxed">{String(report.summary)}</p>
-        </motion.div>
-      )}
-
-      {/* Key Figures */}
+      {/* Key figures */}
       {keyFigures.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 mb-4">
-            <BarChart3 className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-display font-semibold text-foreground uppercase tracking-wider">
+        <section>
+          <div className="mb-5 flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-primary" />
+
+            <h3 className="text-lg font-semibold text-white">
               Key Figures
             </h3>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {keyFigures.slice(0, 12).map((kf, idx) => (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {keyFigures.slice(0, 9).map((kf, idx) => (
               <motion.div
                 key={`${kf.name}-${idx}`}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.1 + idx * 0.05 }}
-                className="p-4 rounded-xl glass group hover:border-primary/30 transition-all"
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.04 }}
+                className="group relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-6 transition-all hover:border-primary/20 hover:bg-white/[0.05]"
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <Hash className="h-3 w-3 text-primary" />
-                  <span className="text-xs text-muted-foreground truncate">
+                <div className="absolute right-0 top-0 h-32 w-32 rounded-full bg-primary/10 blur-3xl transition-all group-hover:bg-primary/20" />
+
+                <div className="relative z-10">
+                  <p className="mb-3 text-sm text-white/50">
                     {kf.name}
-                  </span>
-                </div>
+                  </p>
 
-                <p
-                  className={cn(
-                    "text-2xl font-display font-bold text-foreground transition-all",
-                    "group-hover:gradient-text"
+                  <h4 className="text-3xl font-semibold tracking-tight text-white">
+                    {kf.value}
+                    {kf.unit && kf.unit !== "unknown"
+                      ? ` ${formatUnit(kf.unit)}`
+                      : ""}
+                  </h4>
+
+                  {kf.context && (
+                    <p className="mt-4 text-sm leading-6 text-white/45">
+                      {kf.context}
+                    </p>
                   )}
-                >
-                  {kf.value}
-                  {kf.unit && kf.unit !== "unknown" ? ` ${formatUnit(kf.unit)}` : ""}
-                </p>
-
-                {kf.context && (
-                  <div className="text-[11px] text-muted-foreground mt-2 truncate">
-                    {kf.context}
-                  </div>
-                )}
+                </div>
               </motion.div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
       {/* Sections */}
-      <div>
-        <h3 className="text-sm font-display font-semibold text-foreground uppercase tracking-wider mb-4">
-          Detailed Sections
-        </h3>
-        <div className="space-y-3">
+      <section>
+        <div className="mb-5 flex items-center gap-2">
+          <FileText className="h-5 w-5 text-primary" />
+
+          <h3 className="text-lg font-semibold text-white">
+            Detailed Analysis
+          </h3>
+        </div>
+
+        <div className="space-y-4">
           {(report.sections ?? []).map((section, index) => (
-            <CollapsibleSection key={index} section={section} index={index} />
+            <CollapsibleSection
+              key={index}
+              section={section}
+              index={index}
+            />
           ))}
         </div>
-      </div>
+      </section>
+
+      {/* Conclusion */}
+      {report.conclusion && (
+        <section className="rounded-[32px] border border-white/10 bg-gradient-to-br from-white/[0.03] to-primary/10 p-8">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-xs font-medium uppercase tracking-[0.2em] text-primary">
+            Conclusion
+          </div>
+
+          <p className="max-w-4xl text-[15px] leading-8 text-white/75">
+            {report.conclusion}
+          </p>
+        </section>
+      )}
     </motion.div>
   );
 }
