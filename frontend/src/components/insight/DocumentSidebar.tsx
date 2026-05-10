@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   FileText,
   Clock,
@@ -39,6 +39,7 @@ interface DocumentSidebarProps {
     targetWorkspaceId: string,
     mode: "copy" | "move"
   ) => Promise<void>;
+  onOpenReport: () => void;
 }
 
 type StatusUI = {
@@ -213,6 +214,7 @@ export function DocumentSidebar({
   currentWorkspace,
   workspaces,
   onTransferDocument,
+  onOpenReport,
 }: DocumentSidebarProps) {
   const [contextMenu, setContextMenu] = useState<{
     doc: Document;
@@ -354,6 +356,7 @@ export function DocumentSidebar({
 
     const StatusIcon = status.icon;
     const isSelected = selectedDocument?.id === doc.id;
+    const isCompleted = doc.file_status === "completed";
     const showStatus = doc.file_status !== "completed";
 
     return (
@@ -371,10 +374,11 @@ export function DocumentSidebar({
           });
         }}
         className={cn(
-          "w-full rounded-xl transition-all duration-200 cursor-pointer",
-          "hover:bg-sidebar-accent group",
-          isSelected &&
-            "bg-sidebar-accent ring-1 ring-primary/30 shadow-lg shadow-primary/5"
+          "w-full cursor-pointer overflow-hidden rounded-2xl border transition-all duration-300",
+          "bg-background/30 backdrop-blur-xl",
+          isSelected
+            ? "border-primary/30 bg-primary/5 shadow-xl shadow-primary/10"
+            : "border-white/5 hover:border-white/10 hover:bg-sidebar-accent"
         )}
       >
         <button
@@ -384,16 +388,14 @@ export function DocumentSidebar({
         >
           <div
             className={cn(
-              "p-2 rounded-lg transition-colors shrink-0",
-              isSelected ? "bg-primary/20" : "bg-muted group-hover:bg-primary/10"
+              "p-2 rounded-xl transition-colors shrink-0",
+              isSelected ? "bg-primary/20" : "bg-muted"
             )}
           >
             <FileText
               className={cn(
                 "h-4 w-4",
-                isSelected
-                  ? "text-primary"
-                  : "text-muted-foreground group-hover:text-primary"
+                isSelected ? "text-primary" : "text-muted-foreground"
               )}
             />
           </div>
@@ -402,16 +404,14 @@ export function DocumentSidebar({
             <p
               className={cn(
                 "text-sm font-medium leading-snug break-words line-clamp-2 transition-colors",
-                isSelected
-                  ? "text-foreground"
-                  : "text-sidebar-foreground group-hover:text-foreground"
+                isSelected ? "text-foreground" : "text-sidebar-foreground"
               )}
             >
               {doc.filename}
             </p>
 
             {showStatus && (
-              <div className="flex items-center gap-2 mt-2">
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <span
                   className={cn(
                     "px-2 py-0.5 rounded-full text-[10px] font-medium border",
@@ -428,6 +428,31 @@ export function DocumentSidebar({
             )}
           </div>
         </button>
+
+        <AnimatePresence>
+          {isSelected && isCompleted && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.22 }}
+              className="overflow-hidden"
+            >
+              <div className="px-4 pb-4">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenReport();
+                  }}
+                  className="w-full rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm font-medium text-primary transition-all hover:border-primary/30 hover:bg-primary/15"
+                >
+                  Open Report
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     );
   };

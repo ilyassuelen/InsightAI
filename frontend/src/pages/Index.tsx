@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Sparkles } from "lucide-react";
 
 import { HeroSection } from "@/components/landing/HeroSection";
 import { WorkflowSection } from "@/components/landing/WorkflowSection";
@@ -12,9 +13,9 @@ import { Header } from "@/components/insight/Header";
 import { DocumentSidebar } from "@/components/insight/DocumentSidebar";
 import { UploadZone } from "@/components/insight/UploadZone";
 import { ProcessSteps } from "@/components/insight/ProcessSteps";
-import { ReportViewer } from "@/components/insight/ReportViewer";
 import { ChatPreview } from "@/components/insight/ChatPreview";
 import { DashboardHero } from "@/components/insight/DashboardHero";
+import { ReportModal } from "@/components/insight/ReportModal";
 
 import { useDocuments } from "@/hooks/useDocuments";
 import { useWorkspace } from "@/hooks/useWorkspace";
@@ -29,6 +30,7 @@ const Index = () => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showChat, setShowChat] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   const {
     workspaces,
@@ -97,6 +99,7 @@ const Index = () => {
     resetState();
     resetWorkspaceState();
     setShowChat(false);
+    setShowReportModal(false);
     setSidebarOpen(true);
     setView("landing");
   };
@@ -168,6 +171,7 @@ const Index = () => {
                 currentWorkspace={currentWorkspace}
                 workspaces={workspaces}
                 onTransferDocument={transferDocument}
+                onOpenReport={() => setShowReportModal(true)}
               />
             </motion.div>
           )}
@@ -185,6 +189,7 @@ const Index = () => {
                 className="absolute inset-0 bg-background/90 backdrop-blur-md"
                 onClick={() => setSidebarOpen(false)}
               />
+
               <motion.div
                 initial={{ x: -320 }}
                 animate={{ x: 0 }}
@@ -203,13 +208,21 @@ const Index = () => {
                   currentWorkspace={currentWorkspace}
                   workspaces={workspaces}
                   onTransferDocument={transferDocument}
+                  onOpenReport={() => setShowReportModal(true)}
                 />
               </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        <main className="flex-1 flex overflow-hidden">
+        <main
+          className="flex-1 flex overflow-hidden"
+          onClick={() => {
+            if (showChat) {
+              setShowChat(false);
+            }
+          }}
+        >
           <div
             className={cn(
               "relative flex-1 overflow-y-auto p-4 transition-all sm:p-6 lg:p-8",
@@ -235,6 +248,7 @@ const Index = () => {
                       <p className="text-xs font-medium uppercase tracking-[0.2em] text-primary">
                         New analysis
                       </p>
+
                       <h2 className="mt-1 font-display text-xl font-semibold text-foreground">
                         Upload source material
                       </h2>
@@ -242,6 +256,7 @@ const Index = () => {
                   </div>
 
                   <UploadZone onUpload={uploadDocument} />
+
                   {error && (
                     <p className="rounded-xl border border-error/20 bg-error/10 px-4 py-3 text-xs text-error">
                       {error}
@@ -254,6 +269,7 @@ const Index = () => {
                     <p className="text-xs font-medium uppercase tracking-[0.2em] text-primary">
                       Pipeline
                     </p>
+
                     <h2 className="mt-1 font-display text-xl font-semibold text-foreground">
                       How InsightAI processes files
                     </h2>
@@ -262,62 +278,73 @@ const Index = () => {
                   <ProcessSteps />
                 </section>
               </div>
-
-              <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-card/90 via-card/70 to-primary/5 p-5 shadow-2xl shadow-primary/5 backdrop-blur-xl lg:p-8">
-                  <div className="pointer-events-none absolute inset-0 ai-grid opacity-25" />
-                  <div className="pointer-events-none absolute -top-32 right-10 h-72 w-72 rounded-full bg-primary/15 blur-3xl" />
-                  <div className="pointer-events-none absolute -bottom-32 left-10 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
-
-                  <div className="relative z-10 mb-6 flex flex-wrap items-end justify-between gap-4">
-                    <div>
-                        <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
-                            Report Section
-                        </div>
-
-                        <h2 className="font-display text-2xl font-semibold text-foreground">
-                            Structured report
-                        </h2>
-
-                        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                            Review the generated analysis, key figures and detailed findings from your selected document.
-                        </p>
-                    </div>
-
-                    {selectedDocument && (
-                        <div className="rounded-2xl border border-border/60 bg-background/40 px-4 py-3 text-sm text-muted-foreground">
-                            Source:{" "}
-                            <span className="font-medium text-foreground">
-                                {selectedDocument.filename}
-                            </span>
-                        </div>
-                    )}
-                  </div>
-
-                  <div className="relative z-10 overflow-hidden rounded-2xl border border-white/10 bg-background/35 p-4 backdrop-blur-xl lg:p-6">
-                    <ReportViewer
-                      report={report}
-                      isLoading={isLoading}
-                      documentName={selectedDocument?.filename}
-                    />
-                  </div>
-              </section>
             </div>
           </div>
 
           <AnimatePresence>
+            {showReportModal && (
+              <ReportModal
+                isOpen={showReportModal}
+                onClose={() => setShowReportModal(false)}
+                report={report}
+                isLoading={isLoading}
+                documentName={selectedDocument?.filename}
+              />
+            )}
+          </AnimatePresence>
+
+          {/* Floating chat button */}
+          {!showChat && (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.85, y: 24 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              whileHover={{ scale: 1.06 }}
+              whileTap={{ scale: 0.96 }}
+              onClick={() => setShowChat(true)}
+              onMouseDown={(e) => e.stopPropagation()}
+              aria-label="Open AI Chat"
+              className="group fixed bottom-6 right-6 z-50"
+            >
+              <div className="absolute inset-0 rounded-full bg-primary/30 blur-2xl transition-all duration-500 group-hover:bg-primary/50" />
+
+              <motion.div
+                animate={{
+                  boxShadow: [
+                    "0 0 0px rgba(59,130,246,0.0)",
+                    "0 0 30px rgba(59,130,246,0.35)",
+                    "0 0 0px rgba(59,130,246,0.0)",
+                  ],
+                }}
+                transition={{ repeat: Infinity, duration: 3.2 }}
+                className="relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-black/40 backdrop-blur-2xl"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/90 via-primary to-cyan-400/90 opacity-90" />
+
+                <div className="absolute inset-[1px] rounded-full bg-black/20 backdrop-blur-xl" />
+
+                <div className="absolute top-1.5 left-2 h-4 w-10 rounded-full bg-white/20 blur-md" />
+
+                <Sparkles className="relative z-10 h-5 w-5 text-white drop-shadow-lg" />
+              </motion.div>
+            </motion.button>
+          )}
+
+          <AnimatePresence>
             {showChat && (
-                <motion.div
-                  initial={{ opacity: 0, y: 24, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 24, scale: 0.96 }}
-                  transition={{ duration: 0.25, ease: "easeOut" }}
-                  className="fixed bottom-4 right-4 z-50 h-[min(620px,calc(100vh-7rem))] w-[min(420px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-white/10 bg-card/90 shadow-2xl shadow-primary/20 backdrop-blur-xl lg:bottom-6 lg:right-6"
-                >
-                    <ChatPreview
-                        workspaceId={currentWorkspace?.id}
-                        onClose={() => setShowChat(false)}
-                    />
-                </motion.div>
+              <motion.div
+                initial={{ opacity: 0, y: 24, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 24, scale: 0.96 }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
+                onClick={(e) => e.stopPropagation()}
+                className="fixed bottom-4 right-4 z-50 h-[min(620px,calc(100vh-7rem))] w-[min(420px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-white/10 bg-card/90 shadow-2xl shadow-primary/20 backdrop-blur-xl lg:bottom-6 lg:right-6"
+              >
+                <ChatPreview
+                  workspaceId={currentWorkspace?.id}
+                  onClose={() => setShowChat(false)}
+                />
+              </motion.div>
             )}
           </AnimatePresence>
         </main>
