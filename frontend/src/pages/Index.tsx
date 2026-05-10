@@ -314,11 +314,7 @@ const Index = () => {
                   className="fixed bottom-4 right-4 z-50 h-[min(620px,calc(100vh-7rem))] w-[min(420px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-white/10 bg-card/90 shadow-2xl shadow-primary/20 backdrop-blur-xl lg:bottom-6 lg:right-6"
                 >
                     <ChatPreview
-                        documentId={
-                            selectedDocument?.id != null
-                                ? String(selectedDocument.id)
-                                : undefined
-                        }
+                        workspaceId={currentWorkspace?.id}
                         onClose={() => setShowChat(false)}
                     />
                 </motion.div>

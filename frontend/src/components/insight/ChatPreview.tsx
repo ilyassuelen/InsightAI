@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { apiJson } from "@/lib/api";
 
 interface ChatPreviewProps {
-  documentId?: string;
+  workspaceId?: string | number;
   onClose?: () => void;
 }
 
@@ -22,10 +22,9 @@ interface ChatMessage {
 }
 
 export function ChatPreview({
-  documentId,
+  workspaceId,
   onClose,
 }: ChatPreviewProps) {
-
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -41,7 +40,7 @@ export function ChatPreview({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!message.trim() || !documentId) return;
+    if (!message.trim() || !workspaceId) return;
 
     const userMessage: ChatMessage = {
       role: "user",
@@ -49,7 +48,6 @@ export function ChatPreview({
     };
 
     setMessages((prev) => [...prev, userMessage]);
-
     setMessage("");
     setLoading(true);
 
@@ -57,7 +55,7 @@ export function ChatPreview({
       const data = await apiJson<{ answer: string }>("/chat/", {
         method: "POST",
         body: JSON.stringify({
-          document_id: Number(documentId),
+          workspace_id: Number(workspaceId),
           message: userMessage.content,
         }),
       });
@@ -79,13 +77,12 @@ export function ChatPreview({
           content: "Sorry, I couldn't generate a response.",
         },
       ]);
-
     } finally {
       setLoading(false);
     }
   };
 
-  const isDisabled = !documentId || loading;
+  const isDisabled = !workspaceId || loading;
 
   return (
     <motion.div
@@ -94,18 +91,12 @@ export function ChatPreview({
       transition={{ duration: 0.25 }}
       className="relative flex h-full flex-col overflow-hidden bg-gradient-to-b from-card/95 via-card/80 to-background/90 backdrop-blur-2xl"
     >
-      {/* Background */}
       <div className="pointer-events-none absolute inset-0 ai-grid opacity-20" />
-
       <div className="pointer-events-none absolute -top-20 right-0 h-56 w-56 rounded-full bg-primary/15 blur-3xl" />
-
       <div className="pointer-events-none absolute bottom-0 left-0 h-56 w-56 rounded-full bg-cyan-500/10 blur-3xl" />
 
-      {/* Header */}
       <div className="relative z-10 border-b border-white/10 px-5 py-4">
         <div className="flex items-center gap-3">
-
-          {/* Icon */}
           <div className="relative rounded-2xl gradient-bg p-3 shadow-lg shadow-primary/20">
             <MessageSquare className="h-5 w-5 text-primary-foreground" />
 
@@ -114,18 +105,13 @@ export function ChatPreview({
             </span>
           </div>
 
-          {/* Text */}
           <div className="min-w-0 flex-1">
             <h3 className="font-display text-sm font-semibold text-foreground">
               Insight Chat
             </h3>
-
-
           </div>
 
-          {/* Status + Close */}
           <div className="flex items-center gap-2">
-
             <span
               className={cn(
                 "rounded-full border px-2.5 py-1 text-[10px] font-medium",
@@ -150,13 +136,9 @@ export function ChatPreview({
         </div>
       </div>
 
-      {/* Messages */}
       <div className="relative z-10 flex-1 overflow-y-auto p-4">
-
         {messages.length === 0 ? (
-
           <div className="flex h-full flex-col items-center justify-center text-center">
-
             <motion.div
               initial={{ scale: 0.92, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -171,17 +153,16 @@ export function ChatPreview({
               <div className="mx-auto max-w-[280px]">
 
                 <p className="text-base font-semibold text-foreground">
-                  Ask your document
+                  Ask your workspace
                 </p>
 
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  Select a document and ask questions.
-                  Answers are generated directly from your document context.
+                  Ask questions across all uploaded documents in the current workspace.
                 </p>
 
-                {!documentId && (
+                {!workspaceId && (
                   <div className="mt-5 rounded-2xl border border-primary/15 bg-primary/10 px-4 py-3 text-xs text-primary">
-                    Select a document to start chatting.
+                    Select a workspace to start chatting.
                   </div>
                 )}
               </div>
@@ -189,20 +170,16 @@ export function ChatPreview({
           </div>
 
         ) : (
-
           <div className="space-y-4">
 
             {messages.map((msg, idx) => (
-
               <motion.div
                 key={idx}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 className={cn(
                   "flex",
-                  msg.role === "user"
-                    ? "justify-end"
-                    : "justify-start"
+                  msg.role === "user" ? "justify-end" : "justify-start"
                 )}
               >
 
@@ -238,7 +215,6 @@ export function ChatPreview({
         )}
       </div>
 
-      {/* Input */}
       <form
         onSubmit={handleSubmit}
         className="relative z-10 border-t border-white/10 bg-background/30 p-4 backdrop-blur-xl"
@@ -251,9 +227,9 @@ export function ChatPreview({
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder={
-              documentId
-                ? "Ask about your document..."
-                : "Select a document first..."
+              workspaceId
+                ? "Ask across this workspace..."
+                : "Select a workspace first..."
             }
             disabled={isDisabled}
             className={cn(
@@ -265,7 +241,7 @@ export function ChatPreview({
 
           <button
             type="submit"
-            disabled={!documentId || !message.trim() || loading}
+            disabled={!workspaceId || !message.trim() || loading}
             className={cn(
               "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl gradient-bg text-primary-foreground shadow-lg shadow-primary/20 transition-all",
               "hover:scale-105 hover:opacity-95",
