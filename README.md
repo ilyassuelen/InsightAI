@@ -41,7 +41,7 @@ Short walkthrough showing the full InsightAI UI.
 
 ## Live Preview
 
-Frontend preview: https://insightai-lyart.vercel.app/
+Frontend preview: [https://insightai-lyart.vercel.app/](https://insightai-lyart.vercel.app/)
 
 > Note: The hosted preview runs with limited free-tier backend resources.  
 > For reliable document processing, run the project locally or deploy the backend on a production-grade instance.
@@ -134,24 +134,29 @@ npm run dev
 
 Create a `.env` file in the **project root**:
 
-| Name                | Required | Description                                                        |
-|---------------------|----------|--------------------------------------------------------------------|
-| OPENAI_API_KEY      | ✅        | OpenAI API key for AI report generation                            |
-| GEMINI_API_KEY      | ❌        | Optional Gemini API key (automatic fallback)                       |
-| QDRANT_URL          | ✅        | URL of the Qdrant vector database (default: http://localhost:6333) |
-| QDRANT_COLLECTION   | ❌        | Qdrant collection name (default: insightai_chunks)                 |
-| JWT_SECRET_KEY      | ✅        | Secret key used for signing JWT authentication tokens              |
-| LANGFUSE_PUBLIC_KEY | ❌        | Langfuse public key for LLM tracing                                |
-| LANGFUSE_SECRET_KEY | ❌        | Langfuse secret key for LLM tracing                                |
-| LANGFUSE_HOST       | ❌        | Langfuse host URL (e.g. https://cloud.langfuse.com)                |
-| DATABASE_URL        | ❌        | Optional DB URL for PostgreSQL (defaults to SQLite if not set)     |
-
+| Name                  | Required | Description |
+|------------------------|----------|-------------|
+| OPENAI_API_KEY         | ✅ | OpenAI API key for AI report generation |
+| GEMINI_API_KEY         | ❌ | Optional Gemini fallback API key |
+| DATABASE_URL           | ❌ | PostgreSQL connection string (SQLite fallback supported) |
+| JWT_SECRET_KEY         | ✅ | Secret key for JWT authentication |
+| QDRANT_URL             | ✅ | Qdrant instance or cloud cluster URL |
+| QDRANT_API_KEY         | ❌ | API key for Qdrant Cloud authentication |
+| QDRANT_COLLECTION      | ❌ | Collection name for vector storage |
+| LANGFUSE_PUBLIC_KEY    | ❌ | Langfuse public key |
+| LANGFUSE_SECRET_KEY    | ❌ | Langfuse secret key |
+| LANGFUSE_HOST          | ❌ | Langfuse host URL |
+| R2_ACCOUNT_ID          | ❌ | Cloudflare R2 account ID |
+| R2_ACCESS_KEY_ID       | ❌ | Cloudflare R2 access key |
+| R2_SECRET_ACCESS_KEY   | ❌ | Cloudflare R2 secret access key |
+| R2_BUCKET              | ❌ | Cloudflare R2 bucket name |
+| CORS_ORIGINS           | ❌ | Allowed frontend origins for CORS |
 
 ## Usage
 
 1. Open the frontend in your browser at [http://localhost:8080](http://localhost:8080).
 2. Register or login
-3. Use your own or create a workspace
+3. Select or create a workspace
 4. Select your preferred report language in the dashboard.
 5. Upload a document (PDF, CSV, DOCX, TXT)  
 6. Wait for AI processing (status shown in sidebar).  
