@@ -93,7 +93,7 @@ export function ReportExportButton({
       )}
     >
       <Download className="h-4 w-4" />
-      Export PDF
+      Export as PDF
     </button>
   );
 }
