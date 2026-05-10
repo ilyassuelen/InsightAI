@@ -51,7 +51,7 @@ export function Header({
         <div className="flex items-center gap-4">
           <button
             onClick={onToggleSidebar}
-            className="p-2.5 rounded-lg hover:bg-muted transition-colors lg:hidden"
+            className="p-2.5 rounded-lg hover:bg-muted transition-colors"
             aria-label="Toggle sidebar"
           >
             <Menu className="h-5 w-5 text-foreground" />

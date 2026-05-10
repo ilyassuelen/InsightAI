@@ -55,6 +55,7 @@ export function useDocuments(workspaceId?: string | number | null) {
         id: d.id,
         client_id: d.client_id ?? String(d.id),
         filename: d.filename,
+        file_type: d.file_type,
         file_status: d.file_status as DocumentStatus,
         created_at: d.created_at,
         size: d.size,
@@ -81,6 +82,7 @@ export function useDocuments(workspaceId?: string | number | null) {
           id: d.id,
           client_id: d.client_id ?? String(d.id),
           filename: d.filename,
+          file_type: d.file_type,
           file_status: d.file_status as DocumentStatus,
           created_at: d.created_at,
           size: d.size,
@@ -107,6 +109,7 @@ export function useDocuments(workspaceId?: string | number | null) {
       id: -1,
       client_id: clientId,
       filename: file.name,
+      file_type: file.type,
       file_status: 'uploaded',
       created_at: new Date().toISOString(),
       size: file.size,
@@ -137,7 +140,12 @@ export function useDocuments(workspaceId?: string | number | null) {
       setDocuments(prev =>
         prev.map(doc =>
           doc.client_id === clientId
-            ? { ...doc, id: realId, file_status: 'processing' }
+            ? {
+                ...doc,
+                id: realId,
+                file_type: data.file_type ?? doc.file_type,
+                file_status: 'processing',
+              }
             : doc
         )
       );
