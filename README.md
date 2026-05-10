@@ -1,5 +1,7 @@
-![InsightAI Logo](frontend/public/logo.png)
-> Turn unstructured documents into structured insights using AI.
+<p align="center">
+  <img src="frontend/public/logo.png" alt="InsightAI Logo" width="300"/>
+</p>
+> Transform PDF, CSV, DOCX and TXT files into structured AI reports and searchable knowledge.
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-brightgreen)
 ![Python ≥3.10](https://img.shields.io/badge/python-%3E%3D3.10-blue)
@@ -11,14 +13,17 @@
 
 ---
 
-**InsightAI** is a document-centric AI platform that transforms unstructured data into structured insights.
+**InsightAI** is an AI-powered document intelligence platform for analyzing PDF, CSV, DOCX and TXT files using Retrieval-Augmented Generation (RAG) and scalable LLM pipelines.
 
-Users can upload **PDF, CSV, DOCX, and TXT files**, which are processed through a **Retrieval-Augmented Generation (RAG)** pipeline backed by **Qdrant vector search**.
-The system generates **structured AI reports** and enables an **interactive document-aware chat** within **personal and team workspaces**.
+The system supports **automated parsing, intelligent chunking, Qdrant-based vector retrieval, structured AI report generation, and workspace-wide AI chat across uploaded documents**.
 
-> **Status:**  
-> ✅ Fully supports **multi-user team workspaces, document sharing, and role-based access**  
-> ✅ Optimized for **PDF, CSV, DOCX, and TXT** processing
+> **Current Capabilities:**  
+> - Multi-user team workspaces  
+> - Role-based access control
+> - Workspace-scoped document isolation
+> - AI-powered structured reporting
+> - Workspace-wide document chat
+> - Multi-format ingestion (PDF, CSV, DOCX, TXT)
 
 ---
 
@@ -29,14 +34,23 @@ The system generates **structured AI reports** and enables an **interactive docu
 Short walkthrough showing the full InsightAI UI.
 
 <p align="center">
-  <img src="static/images/demo.gif" alt="InsightAI Application Demo" width="900"/>
+  <img src="static/images/insightai-preview.gif" alt="InsightAI Application Demo" width="900"/>
 </p>
+
+---
+
+## Live Preview
+
+Frontend preview: https://insightai-lyart.vercel.app/
+
+> Note: The hosted preview runs with limited free-tier backend resources.  
+> For reliable document processing, run the project locally or deploy the backend on a production-grade instance.
 
 ---
 
 ## ⚡ Key Features
 
-- **Document Upload:** Supports PDFs, CSVs, DOCXs and TXTs.
+- **Document Upload:** Supports PDF, CSV, DOCX and TXT files.
 - **Scalable CSV Processing**  
   Memory-safe streaming & token-aware chunking.  
   Successfully tested with **25,000+ row CSV files**.
@@ -44,7 +58,7 @@ Short walkthrough showing the full InsightAI UI.
   Structured summaries, key figures, findings, risks, and conclusions generated strictly from document evidence.
 - **Multi-Language Report Generation**
   Generate reports in any supported language directly from the dashboard (e.g. EN, DE, FR, ES, AR, CN etc.).
-- **Interactive Chat:** Ask questions about your documents directly in the chat (first version available).
+- **Workspace-Wide AI Chat & Retrieval:** Ask questions across all uploaded workspace documents using semantic retrieval and RAG-based context generation.
 - **Team Workspaces & Collaboration**
   - Personal and shared team spaces
   - Role-based access (Owner / Member)
@@ -59,7 +73,7 @@ Short walkthrough showing the full InsightAI UI.
   - temporary API failures
 - **Robust Processing Pipeline**  
   Chunking, embedding, **Qdrant-based vector storage**, block structuring, reporting and **LLM tracing via Langfuse** for debugging and monitoring.
-- **Responsive UI:** Optimized for desktop and mobile devices.  
+- **Modern AI Workspace Interface:** Glassmorphism-inspired dashboard optimized for structured reporting, document intelligence workflows, and collaborative AI analysis.
 
 ---
 
@@ -80,9 +94,11 @@ cd InsightAI
 ```
 
 #### 2. Vector Database (Qdrant)
-InsightAI uses **Qdrant** as the vector database.
+InsightAI uses **Qdrant** as the vector database and supports both:
+- local Qdrant instances
+- hosted Qdrant Cloud clusters
 
-Make sure Docker is running, then start Qdrant locally:
+For local development, you can start Qdrant via Docker:
 
 ```bash
 docker run -p 6333:6333 -p 6334:6334 \
@@ -143,44 +159,60 @@ Create a `.env` file in the **project root**:
 8. Ask questions about uploaded documents in the chat
 
 ## Tech Stack
-- Frontend: React, TypeScript, Tailwind CSS, Framer Motion
-- Backend: Python, FastAPI, Pydantic
-- AI: OpenAI API (primary LLM), Google Gemini (automatic fallback), Retrieval-Augmented Generation (RAG), Langfuse (LLM observability)
-- Vector Storage: **Qdrant**
-- Observability: Langfuse
+### Frontend
+- React
+- TypeScript
+- Tailwind CSS
+- Framer Motion
+
+### Backend
+- FastAPI
+- Python
+- Pydantic
+- SQLAlchemy
+
+### AI & Retrieval
+- OpenAI
+- Gemini (Fallback)
+- Retrieval-Augmented Generation (RAG)
+- Qdrant
+- Langfuse
+
+### Infrastructure & Deployment
+- Frontend Hosting: Vercel
+- Backend Deployment: Render
+- Database: Neon PostgreSQL
+- Vector Database: Qdrant Cloud
+- Object Storage: Cloudflare R2
 - Authentication: JWT
-- Database: SQLite (default) / PostgreSQL (configurable)
-- State Management: React Hooks & Context
 
 ## Architecture
-```
-User
- │
- ▼
-Frontend (React)
- │
- ▼
-FastAPI Backend
- │
- ├── Document Processing Pipeline
- │      Parsing → Chunking → Embedding
- │
- ├── Vector Search
- │      Qdrant
- │
- ├── Retrieval Layer
- │      Hybrid (Vector + Keyword)
- │
- ▼
-LLM
- │
- ▼
-AI Reports & Chat
+```mermaid
+flowchart TD
+
+A[User Upload] --> B[FastAPI Backend]
+
+B --> C[Document Parsing]
+
+C --> D[Chunking]
+
+D --> E[Embeddings]
+
+E --> F[Qdrant Vector DB]
+
+F --> G[RAG Retrieval]
+
+G --> H[LLM Processing]
+
+H --> I[Structured AI Reports]
+
+H --> J[Workspace AI Chat]
 ```
 
 ## Roadmap (Planned Features)
 - API-connected data ingestion
 - Advanced analytics & visualizations
+- Semantic search improvements
 
 ## 🤝 Contributing
 Contributions are welcome! Please follow these steps:
