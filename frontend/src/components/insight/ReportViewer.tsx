@@ -116,7 +116,7 @@ export function ReportViewer({ report, isLoading, documentName }: ReportViewerPr
           <p className="text-lg font-display font-medium text-foreground mb-1">
             Analyzing document...
           </p>
-          <p className="text-sm text-muted-foreground">Our AI is extracting insights</p>
+          <p className="text-sm text-muted-foreground">Extracting insights from your document</p>
         </div>
       </div>
     );
@@ -133,7 +133,7 @@ export function ReportViewer({ report, isLoading, documentName }: ReportViewerPr
             No report selected
           </p>
           <p className="text-sm text-muted-foreground max-w-sm">
-            Select a completed document from the sidebar to view its AI-generated report.
+            Select a document from the sidebar to view its report.
           </p>
         </div>
       </div>
@@ -154,7 +154,7 @@ export function ReportViewer({ report, isLoading, documentName }: ReportViewerPr
           <div className="flex items-center gap-2 mb-2">
             <Sparkles className="h-4 w-4 text-primary" />
             <span className="text-xs font-medium text-primary uppercase tracking-wider">
-              AI Report
+              Report for document:
             </span>
           </div>
           <h2 className="text-2xl font-display font-bold text-foreground">

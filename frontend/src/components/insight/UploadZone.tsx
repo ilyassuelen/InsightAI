@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { motion } from "framer-motion";
-import { Upload, FileUp, Sparkles } from "lucide-react";
+import { Upload, FileUp, Sparkles, ShieldCheck, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface UploadZoneProps {
@@ -45,9 +45,9 @@ export function UploadZone({ onUpload }: UploadZoneProps) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
+      transition={{ duration: 0.45 }}
       className="w-full"
     >
       <label
@@ -55,27 +55,18 @@ export function UploadZone({ onUpload }: UploadZoneProps) {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={cn(
-          "relative flex flex-col items-center justify-center gap-6 p-10 rounded-2xl cursor-pointer overflow-hidden",
-          "border-2 border-dashed transition-all duration-500",
+          "group relative flex min-h-[260px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-3xl p-8 text-center",
+          "border border-white/10 bg-gradient-to-br from-card/90 via-card/70 to-primary/5 shadow-xl shadow-primary/5 transition-all duration-500",
           isDragging
-            ? "border-primary bg-primary/5 glow"
-            : "border-border hover:border-primary/40 hover:bg-card/50"
+            ? "scale-[1.01] border-primary/50 shadow-2xl shadow-primary/20"
+            : "hover:-translate-y-1 hover:border-primary/30 hover:shadow-2xl hover:shadow-primary/10"
         )}
       >
-        {/* Background decoration */}
-        <div className="absolute inset-0 ai-dots opacity-20" />
-        <div
-          className={cn(
-            "absolute -top-24 -right-24 w-48 h-48 rounded-full blur-3xl transition-opacity duration-500",
-            isDragging ? "bg-primary/20 opacity-100" : "bg-primary/10 opacity-0"
-          )}
-        />
-        <div
-          className={cn(
-            "absolute -bottom-24 -left-24 w-48 h-48 rounded-full blur-3xl transition-opacity duration-500",
-            isDragging ? "bg-accent/20 opacity-100" : "bg-accent/10 opacity-0"
-          )}
-        />
+        <div className="absolute inset-0 ai-dots opacity-30" />
+        <div className="absolute -top-28 right-12 h-56 w-56 rounded-full bg-primary/20 blur-3xl transition-opacity duration-500 group-hover:opacity-100" />
+        <div className="absolute -bottom-28 left-10 h-56 w-56 rounded-full bg-cyan-500/15 blur-3xl transition-opacity duration-500 group-hover:opacity-100" />
+
+        <div className="absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
 
         <input
           type="file"
@@ -85,55 +76,58 @@ export function UploadZone({ onUpload }: UploadZoneProps) {
           aria-label="Upload document"
         />
 
-        {/* Icon */}
         <motion.div
-          animate={isDragging ? { scale: 1.1, y: -10 } : { scale: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 20 }}
+          animate={isDragging ? { scale: 1.08, y: -6 } : { scale: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 260, damping: 18 }}
           className={cn(
-            "relative p-6 rounded-2xl transition-all duration-300",
-            isDragging ? "gradient-bg glow" : "bg-muted/80"
+            "relative z-10 mb-6 rounded-3xl p-6 transition-all duration-300",
+            isDragging
+              ? "gradient-bg shadow-2xl shadow-primary/30"
+              : "bg-background/50 shadow-xl shadow-black/10 group-hover:bg-primary/10"
           )}
         >
           {isDragging ? (
-            <FileUp className="h-10 w-10 text-primary-foreground" />
+            <FileUp className="h-11 w-11 text-primary-foreground" />
           ) : (
-            <Upload className="h-10 w-10 text-muted-foreground" />
+            <Upload className="h-11 w-11 text-primary" />
           )}
 
-          {/* Pulse ring */}
-          {isDragging && (
-            <motion.div
-              initial={{ scale: 1, opacity: 0.5 }}
-              animate={{ scale: 1.5, opacity: 0 }}
-              transition={{ duration: 1, repeat: Infinity }}
-              className="absolute inset-0 rounded-2xl border-2 border-primary"
-            />
-          )}
+          <span className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/20">
+            <Sparkles className="h-3.5 w-3.5" />
+          </span>
         </motion.div>
 
-        {/* Text */}
-        <div className="relative text-center z-10">
-          <p className="text-lg font-display font-semibold text-foreground mb-2">
-            {isDragging ? "Drop your file here" : "Upload your document"}
-          </p>
-          <p className="text-sm text-muted-foreground">Drag & drop or click to browse</p>
+        <div className="relative z-10">
+          <h2 className="font-display text-2xl font-semibold text-foreground">
+            {isDragging ? "Drop it here" : "Upload a new document"}
+          </h2>
 
-          <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
+            Upload a PDF, DOCX, TXT or CSV file. InsightAI will parse it,
+            create chunks, store embeddings and generate a structured report.
+          </p>
+
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
             {["PDF", "DOCX", "TXT", "CSV"].map((type) => (
               <span
                 key={type}
-                className="px-2 py-1 rounded-md bg-muted text-xs font-mono text-muted-foreground"
+                className="rounded-full border border-border/70 bg-background/50 px-3 py-1 text-xs font-mono text-muted-foreground"
               >
                 .{type.toLowerCase()}
               </span>
             ))}
           </div>
-        </div>
 
-        {/* AI badge */}
-        <div className="relative flex items-center gap-2 px-4 py-2 rounded-full glass-subtle border border-primary/20">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium gradient-text">AI-powered analysis</span>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5 rounded-full bg-background/40 px-3 py-1.5">
+              <Zap className="h-3.5 w-3.5 text-cyan-300" />
+              Fast processing
+            </span>
+            <span className="flex items-center gap-1.5 rounded-full bg-background/40 px-3 py-1.5">
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-300" />
+              Workspace isolated
+            </span>
+          </div>
         </div>
       </label>
     </motion.div>

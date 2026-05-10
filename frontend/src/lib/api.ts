@@ -27,10 +27,37 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
 }
 
 export async function apiJson<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await apiFetch(path, options);
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `Request failed: ${res.status}`);
-  }
-  return res.json() as Promise<T>;
+    const res = await apiFetch(path, options);
+
+    if (!res.ok) {
+        let message = `Request failed: ${res.status}`;
+
+        try {
+            const errorData = await res.json();
+
+            if (typeof errorData === "string") {
+                message = errorData;
+
+            } else if (errorData?.detail) {
+                message = errorData.detail;
+
+            } else if (errorData?.message) {
+                message = errorData.message;
+
+            } else {
+                message = JSON.stringify(errorData);
+            }
+
+        } catch {
+            const text = await res.text().catch(() => "");
+
+            if (text) {
+                message = text;
+            }
+        }
+
+        throw new Error(message);
+    }
+
+    return res.json() as Promise<T>;
 }

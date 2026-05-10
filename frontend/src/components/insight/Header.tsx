@@ -22,7 +22,7 @@ interface HeaderProps {
 
 export function Header({
   onToggleSidebar,
-  version = "v1.0 MVP",
+  version = "v2.0",
   onLogout,
 
   workspaces = [],
@@ -95,7 +95,7 @@ export function Header({
           {/* Status indicator */}
           <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-success/10 border border-success/20">
             <Sparkles className="h-3.5 w-3.5 text-success" />
-            <span className="text-xs font-medium text-success">Agent Active</span>
+            <span className="text-xs font-medium text-success">Online</span>
           </div>
 
           {/* Version badge */}

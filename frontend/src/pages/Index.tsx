@@ -14,6 +14,7 @@ import { UploadZone } from "@/components/insight/UploadZone";
 import { ProcessSteps } from "@/components/insight/ProcessSteps";
 import { ReportViewer } from "@/components/insight/ReportViewer";
 import { ChatPreview } from "@/components/insight/ChatPreview";
+import { DashboardHero } from "@/components/insight/DashboardHero";
 
 import { useDocuments } from "@/hooks/useDocuments";
 import { useWorkspace } from "@/hooks/useWorkspace";
@@ -59,8 +60,10 @@ const Index = () => {
   useEffect(() => {
     const boot = async () => {
       if (!isAuthenticated()) return;
+
       try {
         const res = await apiFetch("/auth/me");
+
         if (res.ok) {
           setView("app");
           resetState();
@@ -76,6 +79,7 @@ const Index = () => {
         resetWorkspaceState();
       }
     };
+
     boot();
   }, [resetState, reloadWorkspaces, resetWorkspaceState]);
 
@@ -151,7 +155,7 @@ const Index = () => {
           {sidebarOpen && (
             <motion.div
               initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 300, opacity: 1 }}
+              animate={{ width: 320, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ duration: 0.3, ease: "easeInOut" }}
               className="hidden lg:block shrink-0 overflow-hidden"
@@ -182,11 +186,11 @@ const Index = () => {
                 onClick={() => setSidebarOpen(false)}
               />
               <motion.div
-                initial={{ x: -300 }}
+                initial={{ x: -320 }}
                 animate={{ x: 0 }}
-                exit={{ x: -300 }}
+                exit={{ x: -320 }}
                 transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                className="absolute left-0 top-0 bottom-0 w-[300px] shadow-2xl shadow-primary/10"
+                className="absolute left-0 top-0 bottom-0 w-[320px] shadow-2xl shadow-primary/10"
               >
                 <DocumentSidebar
                   documents={documents}
@@ -208,78 +212,116 @@ const Index = () => {
         <main className="flex-1 flex overflow-hidden">
           <div
             className={cn(
-              "flex-1 overflow-y-auto p-6 lg:p-8 transition-all relative",
+              "relative flex-1 overflow-y-auto p-4 transition-all sm:p-6 lg:p-8",
               showChat && "lg:mr-0"
             )}
           >
-            <div className="absolute inset-0 ai-dots opacity-10 pointer-events-none" />
+            <div className="pointer-events-none absolute inset-0 ai-grid opacity-40" />
+            <div className="pointer-events-none absolute -top-40 left-1/4 h-96 w-96 rounded-full bg-primary/10 blur-3xl" />
+            <div className="pointer-events-none absolute bottom-0 right-10 h-96 w-96 rounded-full bg-cyan-500/10 blur-3xl" />
 
-            <div className="max-w-4xl mx-auto space-y-10 relative z-10">
-              <section>
-                <UploadZone onUpload={uploadDocument} />
-                {error && <p className="text-xs text-error mt-3">{error}</p>}
-              </section>
+            <div className="relative z-10 mx-auto max-w-7xl space-y-8">
+              <DashboardHero
+                documents={documents}
+                currentWorkspace={currentWorkspace}
+                showChat={showChat}
+                onToggleChat={() => setShowChat(!showChat)}
+              />
 
-              <section>
-                <div className="flex items-center gap-2 mb-6">
-                  <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
-                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-4">
-                    How it works
-                  </span>
-                  <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
-                </div>
+              <div className="grid gap-8 xl:grid-cols-[1.05fr_0.95fr]">
+                <section className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-[0.2em] text-primary">
+                        New analysis
+                      </p>
+                      <h2 className="mt-1 font-display text-xl font-semibold text-foreground">
+                        Upload source material
+                      </h2>
+                    </div>
+                  </div>
 
-                <ProcessSteps />
-              </section>
+                  <UploadZone onUpload={uploadDocument} />
+                  {error && (
+                    <p className="rounded-xl border border-error/20 bg-error/10 px-4 py-3 text-xs text-error">
+                      {error}
+                    </p>
+                  )}
+                </section>
 
-              <section>
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-2">
-                    <div className="h-px w-8 bg-gradient-to-r from-transparent to-border" />
-                    <h2 className="text-sm font-display font-semibold text-muted-foreground uppercase tracking-wider">
-                      Report
+                <section className="space-y-4">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-[0.2em] text-primary">
+                      Pipeline
+                    </p>
+                    <h2 className="mt-1 font-display text-xl font-semibold text-foreground">
+                      How InsightAI processes files
                     </h2>
                   </div>
 
-                  <button
-                    onClick={() => setShowChat(!showChat)}
-                    className={cn(
-                      "flex items-center gap-2 text-xs px-4 py-2 rounded-lg transition-all duration-200",
-                      showChat
-                        ? "gradient-bg text-primary-foreground glow-soft"
-                        : "glass hover:border-primary/30 text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {showChat ? "Hide Chat" : "Show Chat"}
-                  </button>
-                </div>
+                  <ProcessSteps />
+                </section>
+              </div>
 
-                <div className="rounded-2xl glass-strong p-8">
-                  <ReportViewer
-                    report={report}
-                    isLoading={isLoading}
-                    documentName={selectedDocument?.filename}
-                  />
-                </div>
+              <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-card/90 via-card/70 to-primary/5 p-5 shadow-2xl shadow-primary/5 backdrop-blur-xl lg:p-8">
+                  <div className="pointer-events-none absolute inset-0 ai-grid opacity-25" />
+                  <div className="pointer-events-none absolute -top-32 right-10 h-72 w-72 rounded-full bg-primary/15 blur-3xl" />
+                  <div className="pointer-events-none absolute -bottom-32 left-10 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
+
+                  <div className="relative z-10 mb-6 flex flex-wrap items-end justify-between gap-4">
+                    <div>
+                        <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
+                            Report Section
+                        </div>
+
+                        <h2 className="font-display text-2xl font-semibold text-foreground">
+                            Structured report
+                        </h2>
+
+                        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                            Review the generated analysis, key figures and detailed findings from your selected document.
+                        </p>
+                    </div>
+
+                    {selectedDocument && (
+                        <div className="rounded-2xl border border-border/60 bg-background/40 px-4 py-3 text-sm text-muted-foreground">
+                            Source:{" "}
+                            <span className="font-medium text-foreground">
+                                {selectedDocument.filename}
+                            </span>
+                        </div>
+                    )}
+                  </div>
+
+                  <div className="relative z-10 overflow-hidden rounded-2xl border border-white/10 bg-background/35 p-4 backdrop-blur-xl lg:p-6">
+                    <ReportViewer
+                      report={report}
+                      isLoading={isLoading}
+                      documentName={selectedDocument?.filename}
+                    />
+                  </div>
               </section>
             </div>
           </div>
 
           <AnimatePresence>
             {showChat && (
-              <motion.div
-                initial={{ width: 0, opacity: 0 }}
-                animate={{ width: 350, opacity: 1 }}
-                exit={{ width: 0, opacity: 0 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-                className="hidden lg:block shrink-0 overflow-hidden"
-              >
-                <ChatPreview
-                  documentId={
-                    selectedDocument?.id != null ? String(selectedDocument.id) : undefined
-                  }
-                />
-              </motion.div>
+                <motion.div
+                  initial={{ opacity: 0, y: 24, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 24, scale: 0.96 }}
+                  transition={{ duration: 0.25, ease: "easeOut" }}
+                  className="fixed bottom-4 right-4 z-50 h-[min(620px,calc(100vh-7rem))] w-[min(420px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-white/10 bg-card/90 shadow-2xl shadow-primary/20 backdrop-blur-xl lg:bottom-6 lg:right-6"
+                >
+                    <ChatPreview
+                        documentId={
+                            selectedDocument?.id != null
+                                ? String(selectedDocument.id)
+                                : undefined
+                        }
+                        onClose={() => setShowChat(false)}
+                    />
+                </motion.div>
             )}
           </AnimatePresence>
         </main>
