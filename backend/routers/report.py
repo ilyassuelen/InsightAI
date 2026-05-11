@@ -63,7 +63,7 @@ def get_reports(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/{document_id}")
-def create_report(document_id: int, current_user: User = Depends(get_current_user)):
+async def create_report(document_id: int, current_user: User = Depends(get_current_user)):
     """
     Generate a structured report for a given document (document_id).
     Protected + access-controlled.
@@ -77,7 +77,7 @@ def create_report(document_id: int, current_user: User = Depends(get_current_use
         if not user_has_access_to_document(db, current_user.id, document):
             raise HTTPException(status_code=403, detail="Forbidden")
 
-        report_data = generate_report_for_document(db, document_id)
+        report_data = await generate_report_for_document(db, document_id)
 
         report = Report(
             document_id=document_id,
@@ -152,6 +152,9 @@ def delete_report(report_id: int, current_user: User = Depends(get_current_user)
         db.delete(report)
         db.commit()
         return {"message": f"Report with ID: {report_id} deleted successfully"}
+
+    except HTTPException:
+        raise
 
     except Exception as e:
         db.rollback()
