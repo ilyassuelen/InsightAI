@@ -1,14 +1,10 @@
 import {
   AlertTriangle,
   BarChart3,
-  CheckCircle,
-  FileText,
   Lightbulb,
   Sparkles,
   TrendingUp,
 } from "lucide-react";
-
-import type { ReportSection } from "@/types/report";
 
 export type SectionTone = {
   label: string;
@@ -20,9 +16,80 @@ export type SectionTone = {
 };
 
 const riskWords = ["risk", "risiko", "problem", "challenge", "weakness", "gefahr"];
-const positiveWords = ["growth", "increase", "success", "chance", "opportunity", "positive", "steigerung", "wachstum"];
-const recommendationWords = ["recommend", "empfehlung", "suggest", "should", "next step", "maßnahme"];
-const financeWords = ["revenue", "umsatz", "profit", "cost", "kosten", "income", "financial", "euro", "€"];
+const positiveWords = [
+  "growth",
+  "increase",
+  "success",
+  "chance",
+  "opportunity",
+  "positive",
+  "steigerung",
+  "wachstum",
+];
+const recommendationWords = [
+  "recommend",
+  "empfehlung",
+  "suggest",
+  "should",
+  "next step",
+  "maßnahme",
+];
+const financeWords = [
+  "revenue",
+  "umsatz",
+  "profit",
+  "cost",
+  "kosten",
+  "income",
+  "financial",
+  "euro",
+  "€",
+];
+
+export function cleanReportTitle(title?: string): string {
+  if (!title) return "Document Report";
+
+  return title
+    .replace(/\.[^/.]+$/, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function isConclusionLikeHeading(heading?: string): boolean {
+  const normalized = (heading || "").trim().toLowerCase();
+
+  return [
+    "conclusion",
+    "fazit",
+    "zusammenfassung und fazit",
+    "abschluss",
+    "schlussfolgerung",
+  ].some((keyword) => normalized.includes(keyword));
+}
+
+export function isDuplicateOverviewSection(heading?: string): boolean {
+  const normalized = (heading || "").trim().toLowerCase();
+
+  const duplicateKeywords = [
+    "executive summary",
+    "summary",
+    "zusammenfassung",
+    "key findings",
+    "wichtigste erkenntnisse",
+    "key figures",
+    "kennzahlen",
+    "risks & issues",
+    "risiken und probleme",
+    "risks",
+    "risiken",
+    "fazit",
+    "conclusion",
+    "schlussfolgerung",
+  ];
+
+  return duplicateKeywords.some((keyword) => normalized.includes(keyword));
+}
 
 export function getSectionTone(heading?: string, content?: unknown): SectionTone {
   const text = `${heading ?? ""} ${String(content ?? "")}`.toLowerCase();
@@ -91,30 +158,4 @@ export function formatReportContent(content: unknown): string {
   } catch {
     return String(content);
   }
-}
-
-export function splitIntoSentences(text: string): string[] {
-  return text
-    .replace(/\n+/g, " ")
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence.length > 40);
-}
-
-export function buildHighlights(summary?: string, sections: ReportSection[] = []) {
-  const candidates: string[] = [];
-
-  if (summary) {
-    candidates.push(...splitIntoSentences(summary));
-  }
-
-  for (const section of sections.slice(0, 4)) {
-    candidates.push(...splitIntoSentences(formatReportContent(section.content)));
-  }
-
-  return candidates.slice(0, 3).map((text, index) => ({
-    id: index,
-    text,
-    icon: index === 0 ? Sparkles : index === 1 ? CheckCircle : FileText,
-  }));
 }

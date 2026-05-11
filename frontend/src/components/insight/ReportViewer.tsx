@@ -8,6 +8,16 @@ import { ReportNavigation } from "@/components/insight/report/ReportNavigation";
 import { ReportSectionCard } from "@/components/insight/report/ReportSectionCard";
 import { ReportConclusion } from "@/components/insight/report/ReportConclusion";
 import { ReportLoadingState } from "@/components/insight/report/ReportLoadingState";
+import { ReportFindings } from "@/components/insight/report/ReportFindings";
+import { ReportRisks } from "@/components/insight/report/ReportRisks";
+import { ReportRecommendations } from "@/components/insight/report/ReportRecommendations";
+import { ReportCharts } from "@/components/insight/report/ReportCharts";
+import { ReportTimeline } from "@/components/insight/report/ReportTimeline";
+import {
+  cleanReportTitle,
+  isConclusionLikeHeading,
+  isDuplicateOverviewSection,
+} from "@/components/insight/report/reportUtils";
 
 import type { Report } from "@/types/report";
 
@@ -22,9 +32,7 @@ export function ReportViewer({
   isLoading,
   documentName,
 }: ReportViewerProps) {
-  if (isLoading) {
-    return <ReportLoadingState />;
-  }
+  if (isLoading) return <ReportLoadingState />;
 
   if (!report) {
     return (
@@ -45,7 +53,28 @@ export function ReportViewer({
   }
 
   const keyFigures = Array.isArray(report.key_figures) ? report.key_figures : [];
-  const sections = Array.isArray(report.sections) ? report.sections : [];
+  const rawSections = Array.isArray(report.sections) ? report.sections : [];
+  const sections = rawSections.filter(
+      (section) => !isDuplicateOverviewSection(section.heading)
+  );
+  const findings = Array.isArray(report.main_findings) ? report.main_findings : [];
+  const risks = Array.isArray(report.risks) ? report.risks : [];
+  const recommendations = Array.isArray(report.recommendations)
+    ? report.recommendations
+    : [];
+  const charts = Array.isArray(report.charts) ? report.charts : [];
+  const timeline = Array.isArray(report.timeline) ? report.timeline : [];
+
+  const reportTitle = cleanReportTitle(
+    documentName || report.title || "Document Report"
+  );
+
+  const hasConclusionSection = sections.some((section) =>
+    isConclusionLikeHeading(section.heading)
+  );
+
+  const showStandaloneConclusion =
+    Boolean(report.conclusion) && !hasConclusionSection;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -53,21 +82,41 @@ export function ReportViewer({
         <aside className="hidden xl:block">
           <ReportNavigation
             hasSummary={Boolean(report.summary)}
+            hasFindings={findings.length > 0}
             hasKeyFigures={keyFigures.length > 0}
-            hasConclusion={Boolean(report.conclusion)}
+            hasCharts={charts.length > 0}
+            hasRisks={risks.length > 0}
+            hasRecommendations={recommendations.length > 0}
+            hasTimeline={timeline.length > 0}
+            hasConclusion={showStandaloneConclusion}
             sections={sections}
           />
         </aside>
 
         <div className="min-w-0 space-y-10">
-          <ReportHero
-            title={documentName || report.title || "Document Report"}
-            generatedAt={report.generated_at}
-          />
+          <ReportHero title={reportTitle} generatedAt={report.generated_at} />
 
           {report.summary && <ReportSummary summary={report.summary} />}
 
+          {findings.length > 0 && <ReportFindings findings={findings} />}
+
           {keyFigures.length > 0 && <ReportStats keyFigures={keyFigures} />}
+
+          {charts.length > 0 && (
+            <>
+              <ReportCharts charts={charts} />
+
+              <div className="my-12 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+            </>
+          )}
+
+          {risks.length > 0 && <ReportRisks risks={risks} />}
+
+          {recommendations.length > 0 && (
+            <ReportRecommendations recommendations={recommendations} />
+          )}
+
+          {timeline.length > 0 && <ReportTimeline timeline={timeline} />}
 
           {sections.length > 0 && (
             <section id="analysis" className="scroll-mt-28">
@@ -90,7 +139,7 @@ export function ReportViewer({
             </section>
           )}
 
-          {report.conclusion && (
+          {showStandaloneConclusion && (
             <ReportConclusion conclusion={report.conclusion} />
           )}
         </div>

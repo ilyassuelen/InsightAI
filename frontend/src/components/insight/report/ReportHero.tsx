@@ -1,6 +1,8 @@
 import { motion } from "framer-motion";
 import { FileText, Sparkles } from "lucide-react";
 
+import { cleanReportTitle } from "@/components/insight/report/reportUtils";
+
 interface ReportHeroProps {
   title: string;
   generatedAt?: string;
@@ -10,6 +12,8 @@ export function ReportHero({ title, generatedAt }: ReportHeroProps) {
   const generatedLabel = generatedAt
     ? new Date(generatedAt).toLocaleString()
     : "unknown";
+
+  const displayTitle = cleanReportTitle(title);
 
   return (
     <section
@@ -31,16 +35,11 @@ export function ReportHero({ title, generatedAt }: ReportHeroProps) {
         </div>
 
         <h1 className="max-w-4xl text-4xl font-semibold leading-tight text-white">
-          {title}
+          {displayTitle}
         </h1>
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
-          <div className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-white/55">
-            <FileText className="h-4 w-4 text-primary" />
-            Structured document analysis
-          </div>
-
-          <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-white/45">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-white/45">
             Generated {generatedLabel}
           </div>
         </div>

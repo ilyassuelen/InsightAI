@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 
 import { ReportViewer } from "@/components/insight/ReportViewer";
 import { ReportExportButton } from "@/components/insight/report/ReportExportButton";
+import { cleanReportTitle } from "@/components/insight/report/reportUtils";
 import type { Report } from "@/types/report";
 
 interface ReportModalProps {
@@ -21,6 +22,8 @@ export function ReportModal({
   documentName,
 }: ReportModalProps) {
   if (!isOpen) return null;
+
+  const displayName = cleanReportTitle(documentName || report?.title || "Structured Report");
 
   return (
     <motion.div
@@ -50,14 +53,14 @@ export function ReportModal({
             </div>
 
             <h2 className="truncate text-2xl font-semibold text-white">
-              {documentName || "Structured Report"}
+              {displayName}
             </h2>
           </div>
 
           <div className="flex items-center gap-3">
             <ReportExportButton
               targetId="insightai-report-export"
-              filename={documentName || "InsightAI Report"}
+              filename={displayName}
               disabled={!report || isLoading}
             />
 
@@ -78,7 +81,7 @@ export function ReportModal({
           <ReportViewer
             report={report}
             isLoading={isLoading}
-            documentName={documentName}
+            documentName={displayName}
           />
         </div>
       </motion.div>

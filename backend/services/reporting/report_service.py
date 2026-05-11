@@ -10,6 +10,9 @@ from backend.models.document import Document
 from backend.models.document_block import DocumentBlock
 from backend.services.vector.vector_store import query_similar_chunks
 from backend.services.reporting.report_schema import ReportModel, ReportSection, KeyFigure
+from backend.services.reporting.timeline_extractor import generate_timeline
+from backend.services.reporting.insight_extractor import generate_report_insights
+from backend.services.reporting.chart_validator import validate_charts
 from backend.services.observability.langfuse_client import langfuse
 from backend.services.observability.langfuse_helpers import (
     langfuse_span,
@@ -451,11 +454,33 @@ async def generate_report_for_document(db: Session, document_id: int) -> Dict[st
             trace_input={"task": "report_final_wrapper"}
         )
 
+        key_figure_dicts = [kf.model_dump() for kf in key_figures]
+
+        insight_data = await generate_report_insights(
+            assembled_report=assembled,
+            key_figures=key_figure_dicts,
+            lang_rule=lang_rule,
+            base_meta=base_meta,
+        )
+
+        timeline = await generate_timeline(
+            assembled_report=assembled,
+            lang_rule=lang_rule,
+            base_meta=base_meta,
+        )
+
+        charts = validate_charts(insight_data.get("charts", []))
+
         report = ReportModel(
             title=final_json.get("title", f"Report for {document.filename}"),
             summary=final_json.get("summary", ""),
             sections=sections,
             key_figures=key_figures,
+            main_findings=insight_data.get("main_findings", []),
+            risks=insight_data.get("risks", []),
+            recommendations=insight_data.get("recommendations", []),
+            charts=charts,
+            timeline=timeline,
             conclusion=final_json.get("conclusion", ""),
         )
 
