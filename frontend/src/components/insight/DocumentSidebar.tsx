@@ -19,6 +19,8 @@ import {
   FileType,
   FileArchive,
   ChevronRight,
+  Search,
+  X,
 } from "lucide-react";
 
 import { Document, DocumentStatus } from "@/types/document";
@@ -222,6 +224,8 @@ export function DocumentSidebar({
     y: number;
   } | null>(null);
 
+  const [searchQuery, setSearchQuery] = useState("");
+
   const [openGroups, setOpenGroups] = useState<Record<DocumentGroupKey, boolean>>({
     pdf: true,
     csv: true,
@@ -234,9 +238,25 @@ export function DocumentSidebar({
     (workspace) => !workspace.isPersonal && workspace.id !== currentWorkspace?.id
   );
 
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+
+  const visibleDocuments = normalizedSearchQuery
+    ? documents.filter((doc) => {
+        const filename = doc.filename.toLowerCase();
+        const fileType = (doc.file_type ?? "").toLowerCase();
+        const status = doc.file_status.toLowerCase();
+
+        return (
+          filename.includes(normalizedSearchQuery) ||
+          fileType.includes(normalizedSearchQuery) ||
+          status.includes(normalizedSearchQuery)
+        );
+      })
+    : documents;
+
   const groupedDocuments: DocumentGroup[] = groupOrder
     .map((key) => {
-      const groupDocs = documents
+      const groupDocs = visibleDocuments
         .filter((doc) => getDocumentGroup(doc) === key)
         .sort(sortByNewestFirst);
 
@@ -468,7 +488,7 @@ export function DocumentSidebar({
             <FolderOpen className="h-4 w-4 text-primary" />
           </div>
 
-          <h2 className="text-sm font-display font-semibold text-sidebar-foreground uppercase tracking-wider">
+          <h2 className="text-xs font-display font-semibold text-sidebar-foreground uppercase tracking-wider">
             Documents
           </h2>
         </div>
@@ -476,6 +496,28 @@ export function DocumentSidebar({
         <p className="text-xs text-muted-foreground mt-2 pl-11">
           {documents.length} {documents.length === 1 ? "file" : "files"} uploaded
         </p>
+
+        <div className="relative mt-4">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search documents..."
+            className="h-10 w-full rounded-xl border border-sidebar-border bg-background/45 pl-10 pr-10 text-sm text-sidebar-foreground outline-none transition-all placeholder:text-muted-foreground/55 focus:border-primary/40 focus:bg-background/70 focus:ring-2 focus:ring-primary/10"
+          />
+
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Clear document search"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-5">
@@ -495,6 +537,24 @@ export function DocumentSidebar({
 
             <p className="text-xs text-muted-foreground/70">
               Upload your first file to get started with document analysis.
+            </p>
+          </motion.div>
+        ) : visibleDocuments.length === 0 ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex flex-col items-center justify-center h-48 text-center px-6"
+          >
+            <div className="p-4 rounded-2xl bg-muted/50 mb-4">
+              <Search className="h-10 w-10 text-muted-foreground/40" />
+            </div>
+
+            <p className="text-sm font-medium text-muted-foreground mb-1">
+              No matching documents
+            </p>
+
+            <p className="text-xs text-muted-foreground/70">
+              Try another filename, file type or status.
             </p>
           </motion.div>
         ) : (
