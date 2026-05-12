@@ -1,5 +1,5 @@
 from backend.database.database import Base
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 import datetime
 
@@ -14,6 +14,12 @@ class Document(Base):
 
     # Report & Chat Language
     language = Column(String, nullable=False, default="de")
+
+    # CSV-specific structured processing fields
+    parquet_key = Column(String, nullable=True)
+    csv_schema = Column(JSON, nullable=True)
+    csv_profile = Column(JSON, nullable=True)
+    csv_summary = Column(JSON, nullable=True)
 
     # Documents belong to a workspace (personal or team)
     workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=False)
