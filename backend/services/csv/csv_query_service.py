@@ -129,17 +129,3 @@ def run_sql_query(*, parquet_key: str, sql: str, max_rows: int = MAX_QUERY_ROWS)
                 os.remove(local_file_path)
             except Exception as exc:
                 logger.warning(f"Could not delete temp parquet file: {exc}")
-
-
-def get_table_preview(parquet_key: str, limit: int = 10) -> Dict[str, Any]:
-    """
-    Return the first rows of the CSV/Parquet table.
-    """
-    return run_sql_query(parquet_key=parquet_key, sql=f"SELECT * FROM data LIMIT {int(limit)}", max_rows=limit)
-
-
-def get_table_row_count(parquet_key: str) -> Dict[str, Any]:
-    """
-    Return the total number of rows.
-    """
-    return run_sql_query(parquet_key=parquet_key, sql="SELECT COUNT(*) AS row_count FROM data", max_rows=1)

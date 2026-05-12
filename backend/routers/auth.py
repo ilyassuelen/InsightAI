@@ -4,8 +4,6 @@ from typing import Optional
 
 from backend.database.database import SessionLocal
 from backend.models.user import User
-from backend.models.workspace import Workspace
-from backend.models.workspace_member import WorkspaceMember
 from backend.services.auth.passwords import hash_password, verify_password
 from backend.services.auth.jwt import create_access_token
 from backend.services.auth.deps import get_current_user

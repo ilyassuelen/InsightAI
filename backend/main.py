@@ -36,10 +36,6 @@ def startup():
     logger.warning("AUTH LOADED")
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
 
-    from backend.routers import user
-    logger.warning("USER LOADED")
-    app.include_router(user.router, prefix="/users")
-
     from backend.routers import document
     logger.warning("DOCUMENT LOADED")
     app.include_router(document.router, prefix="/documents")
@@ -51,14 +47,6 @@ def startup():
     from backend.routers import chat
     logger.warning("CHAT LOADED")
     app.include_router(chat.router, prefix="/chat")
-
-    from backend.routers import session
-    logger.warning("SESSION LOADED")
-    app.include_router(session.router, prefix="/sessions")
-
-    from backend.routers import ai
-    logger.warning("AI LOADED")
-    app.include_router(ai.router, prefix="/ai")
 
     from backend.routers import workspace
     logger.warning("WORKSPACE LOADED")

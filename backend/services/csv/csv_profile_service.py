@@ -1,7 +1,5 @@
-import json
 import logging
 import os
-import tempfile
 from typing import Any, Dict, List, Optional
 
 import duckdb
@@ -407,44 +405,3 @@ def build_csv_profile_from_file(
     finally:
         if conn is not None:
             conn.close()
-
-
-def build_csv_profile_from_text(
-    csv_text: str,
-    *,
-    filename: Optional[str] = None,
-) -> Dict[str, Any]:
-    """
-    Build structured CSV metadata from CSV text.
-    """
-    if not csv_text or not csv_text.strip():
-        raise ValueError("CSV text is empty")
-
-    temp = tempfile.NamedTemporaryFile(
-        mode="w",
-        suffix=".csv",
-        encoding="utf-8",
-        newline="",
-        delete=False,
-    )
-
-    temp_path = temp.name
-
-    try:
-        temp.write(csv_text)
-        temp.close()
-
-        return build_csv_profile_from_file(temp_path, filename=filename)
-
-    finally:
-        try:
-            os.remove(temp_path)
-        except Exception:
-            pass
-
-
-def to_json_debug(data: Dict[str, Any]) -> str:
-    """
-    Helper for local debugging only.
-    """
-    return json.dumps(data, ensure_ascii=False, indent=2, default=str)
