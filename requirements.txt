@@ -16,3 +16,4 @@ langfuse
 pymupdf
 boto3
 psycopg2-binary
+pyarrow
