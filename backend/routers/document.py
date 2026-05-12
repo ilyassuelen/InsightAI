@@ -580,6 +580,13 @@ def transfer_document(id: int, payload: DocumentTransferIn, current_user: User =
             storage_path=new_storage_path,
             file_status=source.file_status,
             language=source.language,
+
+            # CSV-specific structured processing fields
+            parquet_key=source.parquet_key,
+            csv_schema=source.csv_schema,
+            csv_profile=source.csv_profile,
+            csv_summary=source.csv_summary,
+
             workspace_id=payload.target_workspace_id,
             uploaded_by_user_id=current_user.id,
         )
