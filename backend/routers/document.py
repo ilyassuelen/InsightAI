@@ -14,6 +14,7 @@ from backend.parsers.docx_parser import parse_docx
 
 from backend.services.csv.csv_storage_service import create_and_upload_parquet_from_csv_file
 from backend.services.csv.csv_profile_service import build_csv_profile_from_file
+from backend.services.csv.csv_report_service import generate_csv_report
 
 from backend.services.storage.r2_storage import upload_file, download_to_temp_file, delete_file, copy_file
 
@@ -134,6 +135,7 @@ async def process_document_logic(document_id: int):
     1. Convert CSV to Parquet
     2. Build schema, profile and summary metadata
     3. Store the structured CSV metadata on the document
+    4. Generate a CSV report from the structured metadata
     """
 
     chunk_text_from_text, chunk_pdf, MAX_TOKENS = get_chunking_services()
@@ -159,6 +161,9 @@ async def process_document_logic(document_id: int):
         db.commit()
 
         delete_document_chunks(document.id)
+
+        db.query(Report).filter(Report.document_id == document.id).delete()
+        db.commit()
 
         set_status(db, document, "processing")
 
@@ -188,9 +193,30 @@ async def process_document_logic(document_id: int):
             db.commit()
             db.refresh(document)
 
+            set_status(db, document, "report_generating")
+
+            csv_report_data = generate_csv_report(
+                filename=document.filename,
+                csv_schema=document.csv_schema or [],
+                csv_profile=document.csv_profile or {},
+                csv_summary=document.csv_summary or {},
+                language=document.language or "de",
+                base_meta={
+                    "document_id": document.id,
+                    "workspace_id": document.workspace_id,
+                    "filename": document.filename,
+                    "report_mode": "csv_structured",
+                },
+            )
+
+            report = Report(document_id=document.id, content=csv_report_data)
+            db.add(report)
+            db.commit()
+            db.refresh(report)
+
             set_status(db, document, "completed")
 
-            logger.info(f"Structured CSV processing completed for document {document.id}")
+            logger.info(f"Structured CSV processing and report completed for document {document.id}")
 
             return
 
@@ -681,6 +707,9 @@ def delete_document(id: int, current_user: User = Depends(get_current_user)):
 
         delete_document_chunks(id)
         delete_file(document.storage_path)
+
+        if document.parquet_key:
+            delete_file(document.parquet_key)
 
         db.delete(document)
         db.commit()
