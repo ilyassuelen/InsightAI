@@ -9,9 +9,11 @@ from backend.models.document_chunk import DocumentChunk
 from backend.models.document_parse import DocumentParse
 from backend.models.document_block import DocumentBlock
 
-from backend.parsers.csv_parser import iter_csv_rows
 from backend.parsers.txt_parser import parse_txt
 from backend.parsers.docx_parser import parse_docx
+
+from backend.services.csv.csv_storage_service import create_and_upload_parquet_from_csv_file
+from backend.services.csv.csv_profile_service import build_csv_profile_from_file
 
 from backend.services.storage.r2_storage import upload_file, download_to_temp_file, delete_file, copy_file
 
@@ -33,18 +35,16 @@ class DocumentTransferIn(BaseModel):
 def get_chunking_services():
     from backend.services.ingestion.chunking_service import (
         chunk_text_from_text,
-        chunk_csv_stream,
         chunk_pdf,
         MAX_TOKENS,
     )
-    return chunk_text_from_text, chunk_csv_stream, chunk_pdf, MAX_TOKENS
+    return chunk_text_from_text, chunk_pdf, MAX_TOKENS
 
 
 def get_block_services():
     from backend.services.ingestion.document_block_service import create_blocks_from_chunks
-    from backend.services.ingestion.csv_block_service import create_blocks_from_csv_rows
     from backend.services.ingestion.structured_block_service import structure_blocks
-    return create_blocks_from_chunks, create_blocks_from_csv_rows, structure_blocks
+    return create_blocks_from_chunks, structure_blocks
 
 
 def get_vector_services():
@@ -79,10 +79,16 @@ def set_status(db, document, status: str):
     db.refresh(document)
 
 
+def is_csv_file(document: Document) -> bool:
+    """Checks whether the uploaded document is a CSV file."""
+    return document.file_type in ("text/csv", "application/csv") or document.filename.lower().endswith(".csv")
+
+
 def upsert_chunks_to_vectorstore(db, document):
     """
-    Loads document chunks from the database and inserts them into the vector database after embedding.
-    This ensures that newly processed document chunks become searchable via semantic vector search.
+    Loads text-based document chunks from the database and inserts them into Qdrant.
+    Used for PDF, TXT and DOCX files after chunking and embedding.
+    CSV files use a separate structured processing flow.
     """
     upsert_document_chunks, _ = get_vector_services()
 
@@ -115,21 +121,23 @@ def upsert_chunks_to_vectorstore(db, document):
 async def process_document_logic(document_id: int):
     """
     Main background processing pipeline for uploaded documents.
-    Pipeline performs the following steps:
 
-    1. Parse the document depending on its file type
+    PDF, TXT and DOCX files follow the text-based pipeline:
+    1. Parse the document
     2. Split the content into chunks
-    3. Generate embeddings and store them in the vector database
+    3. Generate embeddings and store chunks in Qdrant
     4. Create document blocks
     5. Structure blocks using an LLM
     6. Generate an AI report summarizing the document
 
-    Supported file types:
-    - PDF, CSV, TXT and DOCX
+    CSV files follow a separate data pipeline:
+    1. Convert CSV to Parquet
+    2. Build schema, profile and summary metadata
+    3. Store the structured CSV metadata on the document
     """
 
-    chunk_text_from_text, chunk_csv_stream, chunk_pdf, MAX_TOKENS = get_chunking_services()
-    create_blocks_from_chunks, create_blocks_from_csv_rows, structure_blocks = get_block_services()
+    chunk_text_from_text, chunk_pdf, MAX_TOKENS = get_chunking_services()
+    create_blocks_from_chunks, structure_blocks = get_block_services()
     generate_report_for_document = get_report_service()
     upsert_document_chunks, delete_document_chunks = get_vector_services()
 
@@ -156,41 +164,35 @@ async def process_document_logic(document_id: int):
 
         parse_id = None
 
-        if document.file_type in ("text/csv", "application/csv"):
+        if is_csv_file(document):
             set_status(db, document, "parsing")
 
-            rows_iter = iter_csv_rows(local_file)
+            logger.info(f"Structured CSV processing started for document {document.id}")
 
-            set_status(db, document, "chunking")
-
-            created_chunks = chunk_csv_stream(
-                document_id=document.id,
-                rows_iter=rows_iter,
-                max_tokens=1200,
-                overlap_rows=5,
-                section_title="CSV",
+            parquet_key = create_and_upload_parquet_from_csv_file(
+                csv_file_path=str(local_file),
+                original_filename=document.filename,
             )
 
-            if created_chunks == 0:
-                set_status(db, document, "parsed_empty")
-                return
-
-            set_status(db, document, "embedding")
-            upsert_chunks_to_vectorstore(db, document)
-
-            set_status(db, document, "blocking")
-
-            rows_for_blocks = []
-            for i, row in enumerate(iter_csv_rows(local_file)):
-                rows_for_blocks.append(row)
-                if i >= 3000:
-                    break
-
-            create_blocks_from_csv_rows(
-                db=db,
-                document_id=document.id,
-                rows=rows_for_blocks,
+            csv_metadata = build_csv_profile_from_file(
+                csv_file_path=str(local_file),
+                filename=document.filename,
             )
+
+            document.parquet_key = parquet_key
+            document.csv_schema = csv_metadata.get("schema")
+            document.csv_profile = csv_metadata.get("profile")
+            document.csv_summary = csv_metadata.get("summary")
+
+            db.add(document)
+            db.commit()
+            db.refresh(document)
+
+            set_status(db, document, "completed")
+
+            logger.info(f"Structured CSV processing completed for document {document.id}")
+
+            return
 
         elif document.file_type in ("text/plain", "text/markdown"):
             set_status(db, document, "parsing")
