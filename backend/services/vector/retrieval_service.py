@@ -8,51 +8,73 @@ from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 from sqlalchemy import or_
 
+
+def is_csv_file_type(file_type: str | None, filename: str | None = None) -> bool:
+    file_type = (file_type or "").lower()
+    filename = (filename or "").lower()
+
+    return file_type in ("text/csv", "application/csv") or filename.endswith(".csv")
+
+
 def search_chunks(query: str, workspace_id: int, limit: int = 8):
     """
-    Hybrid Retrieval:
+    Hybrid Retrieval for text-based documents:
     - Vector Search (Qdrant)
     - Keyword Search (SQL)
-    Returns top matching document chunks.
+
+    CSV files are excluded here because they use the separate
+    structured SQL-based CSV chat flow.
     """
 
-    # ----------- VECTOR SEARCH -----------
-    vector = embed_texts([query])[0]
-
-    results = client.query_points(
-        collection_name=COLLECTION_NAME,
-        query=vector,
-        limit=limit,
-        with_payload=True,
-        query_filter=Filter(
-            must=[
-                FieldCondition(
-                    key="workspace_id",
-                    match=MatchValue(value=workspace_id)
-                )
-            ]
-        )
-    )
-
-    points = getattr(results, "points", [])
-    vector_chunks = []
-
-    for p in points:
-        payload = p.payload or {}
-
-        vector_chunks.append({
-            "text": payload.get("_text"),
-            "document_id": payload.get("document_id"),
-            "page": payload.get("page_start"),
-            "section": payload.get("section_title"),
-            "score": p.score,
-            "source": "vector"
-        })
-
-    # ----------- KEYWORD SEARCH -----------
     db = SessionLocal()
 
     try:
+        # ------- VECTOR SEARCH -------
+        vector = embed_texts([query])[0]
+
+        results = client.query_points(
+            collection_name=COLLECTION_NAME,
+            query=vector,
+            limit=limit * 3,
+            with_payload=True,
+            query_filter=Filter(
+                must=[
+                    FieldCondition(
+                        key="workspace_id",
+                        match=MatchValue(value=workspace_id)
+                    )
+                ]
+            )
+        )
+
+        points = getattr(results, "points", [])
+        vector_chunks = []
+
+        for p in points:
+            payload = p.payload or {}
+            document_id = payload.get("document_id")
+
+            document = db.query(Document).filter(Document.id == document_id).first()
+
+            if not document:
+                continue
+
+            if is_csv_file_type(document.file_type, document.filename):
+                continue
+
+            vector_chunks.append({
+                "text": payload.get("_text"),
+                "document_id": document_id,
+                "page": payload.get("page_start"),
+                "section": payload.get("section_title"),
+                "score": p.score,
+                "source": "vector"
+            })
+
+            if len(vector_chunks) >= limit:
+                break
+
+        # ------- KEYWORD SEARCH -------
         keyword_chunks = []
 
         keywords = [w.strip() for w in query.split() if len(w) > 3]
@@ -63,6 +85,8 @@ def search_chunks(query: str, workspace_id: int, limit: int = 8):
                 .join(Document, DocumentChunk.document_id == Document.id)
                 .filter(
                     Document.workspace_id == workspace_id,
+                    ~Document.filename.ilike("%.csv"),
+                    Document.file_type.notin_(["text/csv", "application/csv"]),
                     or_(
                         *[
                             DocumentChunk.text.ilike(f"%{kw}%")
@@ -86,21 +110,20 @@ def search_chunks(query: str, workspace_id: int, limit: int = 8):
                 "source": "keyword"
             })
 
+        # ------- MERGE RESULTS -------
+        combined = vector_chunks + keyword_chunks
+
+        seen = set()
+        unique_chunks = []
+
+        for c in combined:
+            if c["text"] and c["text"] not in seen:
+                unique_chunks.append(c)
+                seen.add(c["text"])
+
+        unique_chunks.sort(key=lambda x: x["score"] or 0, reverse=True)
+
+        return unique_chunks[:limit]
+
     finally:
         db.close()
-
-    # ----------- MERGE RESULTS -----------
-    combined = vector_chunks + keyword_chunks
-
-    seen = set()
-    unique_chunks = []
-
-    for c in combined:
-        if c["text"] and c["text"] not in seen:
-            unique_chunks.append(c)
-            seen.add(c["text"])
-
-    # Sort by score (Vector results higher)
-    unique_chunks.sort(key=lambda x: x["score"] or 0, reverse=True)
-
-    return unique_chunks[:limit]

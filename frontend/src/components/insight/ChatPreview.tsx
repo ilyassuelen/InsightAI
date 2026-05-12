@@ -13,6 +13,7 @@ import { apiJson } from "@/lib/api";
 
 interface ChatPreviewProps {
   workspaceId?: string | number;
+  selectedDocumentId?: string | number | null;
   onClose?: () => void;
 }
 
@@ -23,6 +24,7 @@ interface ChatMessage {
 
 export function ChatPreview({
   workspaceId,
+  selectedDocumentId,
   onClose,
 }: ChatPreviewProps) {
   const [message, setMessage] = useState("");
@@ -56,6 +58,7 @@ export function ChatPreview({
         method: "POST",
         body: JSON.stringify({
           workspace_id: Number(workspaceId),
+          document_id: selectedDocumentId ? Number(selectedDocumentId) : null,
           message: userMessage.content,
         }),
       });

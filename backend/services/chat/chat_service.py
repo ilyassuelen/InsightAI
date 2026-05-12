@@ -5,6 +5,7 @@ import asyncio
 from backend.database.database import SessionLocal
 from backend.models.document import Document
 
+from backend.services.csv.csv_chat_service import answer_csv_question
 from backend.services.vector.retrieval_service import search_chunks
 from backend.services.observability.langfuse_client import langfuse
 from backend.services.observability.langfuse_helpers import (
@@ -37,6 +38,13 @@ def language_instruction() -> str:
     )
 
 
+def is_csv_document(document: Document) -> bool:
+    return (
+        document.file_type in ("text/csv", "application/csv")
+        or document.filename.lower().endswith(".csv")
+    )
+
+
 async def _openai_call(system: str, user_prompt: str):
     """Executes an OpenAI Chat Completion request asynchronously."""
 
@@ -61,11 +69,42 @@ async def generate_chat_response(
         workspace_id: int | None = None
 ) -> str:
     """
-    Generates an AI response for a user chat message using hybrid retrieval.
-    The function retrieves relevant document chunks via vector search and
-    keyword search, constructs a context prompt, and sends it to the LLM
-    for answer generation.
+    Generates an AI response for a user chat message.
+
+    CSV documents use a structured SQL-based flow over Parquet.
+    PDF, TXT and DOCX documents continue to use the existing hybrid retrieval flow.
     """
+
+    if document_id is not None:
+        db = SessionLocal()
+
+        try:
+            document = db.query(Document).filter(Document.id == document_id).first()
+
+            if document and is_csv_document(document):
+                if not document.parquet_key:
+                    return "The CSV file has not been fully processed yet."
+
+                csv_result = await asyncio.to_thread(
+                    lambda: answer_csv_question(
+                        user_question=message,
+                        parquet_key=document.parquet_key,
+                        csv_schema=document.csv_schema or [],
+                        csv_summary=document.csv_summary or {},
+                        language="same language as the user's question",
+                        base_meta={
+                            "document_id": document.id,
+                            "workspace_id": workspace_id,
+                            "user_id": user_id,
+                            "chat_mode": "csv_sql",
+                        },
+                    )
+                )
+
+                return csv_result.get("answer", "")
+
+        finally:
+            db.close()
 
     system = (
         "You are InsightAI, an AI assistant that answers questions about uploaded documents.\n"
