@@ -14,6 +14,8 @@ import { apiJson } from "@/lib/api";
 interface ChatPreviewProps {
   workspaceId?: string | number;
   selectedDocumentId?: string | number | null;
+  selectedDocumentName?: string | null;
+  onClearDocumentSelection?: () => void;
   onClose?: () => void;
 }
 
@@ -25,6 +27,8 @@ interface ChatMessage {
 export function ChatPreview({
   workspaceId,
   selectedDocumentId,
+  selectedDocumentName,
+  onClearDocumentSelection,
   onClose,
 }: ChatPreviewProps) {
   const [message, setMessage] = useState("");
@@ -112,6 +116,33 @@ export function ChatPreview({
             <h3 className="font-display text-sm font-semibold text-foreground">
               Insight Chat
             </h3>
+
+            <div className="mt-1 flex items-center gap-2">
+              {selectedDocumentId ? (
+                <>
+                  <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-300">
+                    Document Chat
+                  </span>
+
+                  <span className="truncate text-[11px] text-muted-foreground">
+                    {selectedDocumentName ?? "Selected document"}
+                  </span>
+
+                  {onClearDocumentSelection && (
+                    <button
+                      onClick={onClearDocumentSelection}
+                      className="text-[10px] text-muted-foreground transition hover:text-foreground"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </>
+              ) : (
+                <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+                  Workspace Chat
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -160,7 +191,10 @@ export function ChatPreview({
                 </p>
 
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  Ask questions across all uploaded documents in the current workspace.
+                  {selectedDocumentId
+                    ? "Ask questions about the selected document."
+                    : "Ask questions across all uploaded documents in the current workspace."
+                  }
                 </p>
 
                 {!workspaceId && (
@@ -231,7 +265,9 @@ export function ChatPreview({
             onChange={(e) => setMessage(e.target.value)}
             placeholder={
               workspaceId
-                ? "Ask across this workspace..."
+                ? selectedDocumentId
+                  ? "Ask about this document..."
+                  : "Ask across this workspace..."
                 : "Select a workspace first..."
             }
             disabled={isDisabled}

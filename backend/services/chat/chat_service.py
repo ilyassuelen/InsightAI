@@ -118,7 +118,11 @@ async def generate_chat_response(
     if workspace_id is None:
         return "No workspace selected."
 
-    chunks = search_chunks(message, workspace_id)
+    chunks = search_chunks(
+        query=message,
+        workspace_id=workspace_id,
+        document_id=document_id,
+    )
 
     if not chunks:
         return "Sorry, I could not find relevant information in the uploaded documents."

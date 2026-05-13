@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   FileText,
@@ -226,6 +226,39 @@ export function DocumentSidebar({
 
   const [searchQuery, setSearchQuery] = useState("");
 
+  const sidebarRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!selectedDocument) return;
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+
+      if (!target) return;
+
+      const sidebarElement = sidebarRef.current;
+
+      if (!sidebarElement) return;
+
+      // Ignore clicks inside the sidebar
+      if (sidebarElement.contains(target)) {
+        return;
+      }
+
+      // Click outside -> clear selected document
+      onSelectDocument(null);
+    };
+
+    const timeout = window.setTimeout(() => {
+      document.addEventListener("click", handleOutsideClick);
+    }, 0);
+
+    return () => {
+      clearTimeout(timeout);
+      document.removeEventListener("click", handleOutsideClick);
+    };
+  }, [selectedDocument, onSelectDocument]);
+
   const [openGroups, setOpenGroups] = useState<Record<DocumentGroupKey, boolean>>({
     pdf: true,
     csv: true,
@@ -402,7 +435,13 @@ export function DocumentSidebar({
         )}
       >
         <button
-          onClick={() => onSelectDocument(doc)}
+          onClick={() => {
+            if (selectedDocument?.id === doc.id) {
+              onSelectDocument(null);
+            } else {
+              onSelectDocument(doc);
+            }
+          }}
           className="w-full flex items-start gap-3 text-left min-w-0 p-4"
           title={doc.filename}
         >
@@ -479,6 +518,7 @@ export function DocumentSidebar({
 
   return (
     <aside
+      ref={sidebarRef}
       className="w-full h-full flex flex-col bg-sidebar border-r border-sidebar-border relative"
       onClick={() => setContextMenu(null)}
     >

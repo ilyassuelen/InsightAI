@@ -16,7 +16,7 @@ def is_csv_file_type(file_type: str | None, filename: str | None = None) -> bool
     return file_type in ("text/csv", "application/csv") or filename.endswith(".csv")
 
 
-def search_chunks(query: str, workspace_id: int, limit: int = 8):
+def search_chunks(query: str, workspace_id: int, document_id: int | None = None, limit: int = 8):
     """
     Hybrid Retrieval for text-based documents:
     - Vector Search (Qdrant)
@@ -32,19 +32,27 @@ def search_chunks(query: str, workspace_id: int, limit: int = 8):
         # ------- VECTOR SEARCH -------
         vector = embed_texts([query])[0]
 
+        must_conditions = [
+            FieldCondition(
+                key="workspace_id",
+                match=MatchValue(value=workspace_id)
+            )
+        ]
+
+        if document_id is not None:
+            must_conditions.append(
+                FieldCondition(
+                    key="document_id",
+                    match=MatchValue(value=document_id)
+                )
+            )
+
         results = client.query_points(
             collection_name=COLLECTION_NAME,
             query=vector,
             limit=limit * 3,
             with_payload=True,
-            query_filter=Filter(
-                must=[
-                    FieldCondition(
-                        key="workspace_id",
-                        match=MatchValue(value=workspace_id)
-                    )
-                ]
-            )
+            query_filter=Filter(must=must_conditions)
         )
 
         points = getattr(results, "points", [])
@@ -52,9 +60,9 @@ def search_chunks(query: str, workspace_id: int, limit: int = 8):
 
         for p in points:
             payload = p.payload or {}
-            document_id = payload.get("document_id")
+            payload_document_id = payload.get("document_id")
 
-            document = db.query(Document).filter(Document.id == document_id).first()
+            document = db.query(Document).filter(Document.id == payload_document_id).first()
 
             if not document:
                 continue
@@ -80,7 +88,7 @@ def search_chunks(query: str, workspace_id: int, limit: int = 8):
         keywords = [w.strip() for w in query.split() if len(w) > 3]
 
         if keywords:
-            rows = (
+            query_builder = (
                 db.query(DocumentChunk)
                 .join(Document, DocumentChunk.document_id == Document.id)
                 .filter(
@@ -94,9 +102,14 @@ def search_chunks(query: str, workspace_id: int, limit: int = 8):
                         ]
                     )
                 )
-                .limit(limit)
-                .all()
             )
+
+            if document_id is not None:
+                query_builder = query_builder.filter(
+                    DocumentChunk.document_id == document_id
+                )
+
+            rows = query_builder.limit(limit).all()
         else:
             rows = []
 
