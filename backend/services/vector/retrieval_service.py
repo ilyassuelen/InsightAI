@@ -72,7 +72,7 @@ def search_chunks(query: str, workspace_id: int, document_id: int | None = None,
 
             vector_chunks.append({
                 "text": payload.get("_text"),
-                "document_id": document_id,
+                "document_id": payload_document_id,
                 "page": payload.get("page_start"),
                 "section": payload.get("section_title"),
                 "score": p.score,

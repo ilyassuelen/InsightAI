@@ -58,6 +58,43 @@ REPORT_SECTIONS = [
     ("Conclusion", "Concluding statement based strictly on the document."),
 ]
 
+SECTION_QUERY_VARIANTS = {
+    "Executive Summary": [
+        "executive summary",
+        "document overview",
+        "main purpose of the document",
+        "overall business summary",
+    ],
+
+    "Key Findings": [
+        "important findings",
+        "main insights",
+        "key developments",
+        "important decisions",
+    ],
+
+    "Key Figures": [
+        "financial metrics",
+        "important numbers",
+        "KPIs revenue profit growth",
+        "financial performance",
+    ],
+
+    "Risks & Issues": [
+        "risks warnings concerns",
+        "issues inconsistencies",
+        "potential problems",
+        "compliance risk",
+    ],
+
+    "Conclusion": [
+        "final conclusion",
+        "overall assessment",
+        "future outlook",
+        "summary outcome",
+    ],
+}
+
 SYSTEM_SECTION = """
 You are an expert business analyst.
 
@@ -235,7 +272,65 @@ async def generate_section(
         db = SessionLocal()
 
         try:
-            hits = query_similar_chunks(document_id=document_id, query=f"{heading}. {instruction}", k=8)
+            queries = SECTION_QUERY_VARIANTS.get(
+                heading,
+                [f"{heading}. {instruction}"]
+            )
+
+            all_hits = []
+
+            for q in queries:
+                hits = query_similar_chunks(
+                    document_id=document_id,
+                    query=q,
+                    k=15,
+                )
+
+                all_hits.extend(hits)
+
+            # -------- DEDUPLICATION + DIVERSITY --------
+
+            seen_texts = set()
+            page_counts = {}
+
+            filtered_hits = []
+
+            all_hits.sort(
+                key=lambda x: x.get("score", 0),
+                reverse=True
+            )
+
+            for h in all_hits:
+                text = " ".join(
+                    (h.get("text") or "").split()
+                ).strip()
+
+                if not text:
+                    continue
+
+                if text in seen_texts:
+                    continue
+
+                metadata = h.get("metadata") or {}
+
+                page = metadata.get("page_start")
+
+                # Avoid too many chunks from same page
+                if page is not None:
+                    count = page_counts.get(page, 0)
+
+                    if count >= 2:
+                        continue
+
+                    page_counts[page] = count + 1
+
+                filtered_hits.append(h)
+                seen_texts.add(text)
+
+                if len(filtered_hits) >= 15:
+                    break
+
+            hits = filtered_hits
 
             if not hits:
                 blocks = (
@@ -404,8 +499,6 @@ async def generate_report_for_document(db: Session, document_id: int) -> Dict[st
         "language": lang,
         "filename": getattr(document, "filename", None)
     }
-
-    key_figures: List[KeyFigure] = []
 
     with langfuse_span(
         langfuse,
