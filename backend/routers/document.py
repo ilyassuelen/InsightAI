@@ -17,6 +17,11 @@ from backend.services.csv.csv_profile_service import build_csv_profile_from_file
 from backend.services.csv.csv_report_service import generate_csv_report
 
 from backend.services.storage.r2_storage import upload_file, download_to_temp_file, delete_file, copy_file
+from backend.services.storage.upload_validation import (
+    UploadValidationError,
+    read_upload_with_limit,
+    validate_upload,
+)
 
 from backend.services.auth.deps import get_current_user
 from backend.models.user import User
@@ -386,9 +391,13 @@ async def upload_document(
 ):
     db = SessionLocal()
     try:
-        file_bytes = await file.read()
+        try:
+            file_bytes = await read_upload_with_limit(file)
+            validated_upload = validate_upload(file.filename, file_bytes)
+        except UploadValidationError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
-        storage_key = upload_file(file_bytes, file.filename)
+        storage_key = upload_file(file_bytes, validated_upload.filename)
 
         if workspace_id is None:
             ws = WorkspaceService.get_personal_workspace(db, current_user.id)
@@ -397,8 +406,8 @@ async def upload_document(
             WorkspaceService.require_member(db, workspace_id, current_user.id)
 
         document = Document(
-            filename=file.filename,
-            file_type=file.content_type,
+            filename=validated_upload.filename,
+            file_type=validated_upload.content_type,
             storage_path=storage_key,
             file_status="uploaded",
             language=(language or "de").strip(),
@@ -410,7 +419,9 @@ async def upload_document(
         db.commit()
         db.refresh(document)
 
-        logger.info(f"Uploaded file '{file.filename}' as document ID {document.id}")
+        logger.info(
+            f"Uploaded file '{validated_upload.filename}' as document ID {document.id}"
+        )
 
         background_tasks.add_task(process_document_logic, document.id)
 
