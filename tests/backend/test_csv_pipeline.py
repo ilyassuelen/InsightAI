@@ -95,19 +95,67 @@ class CsvQuerySafetyTests(unittest.TestCase):
             with self.subTest(sql=sql):
                 self.assertFalse(csv_query_service._is_safe_select_query(sql))
 
-    @unittest.expectedFailure
     def test_safe_column_names_are_not_rejected_by_substring_matching(self) -> None:
-        """Known defect: `created_at` contains the forbidden substring `create`."""
-
         self.assertTrue(csv_query_service._is_safe_select_query('SELECT "created_at" FROM data'))
+        self.assertTrue(
+            csv_query_service._is_safe_select_query(
+                "SELECT 'DROP TABLE other' AS note FROM data -- DELETE is text"
+            )
+        )
 
-    @unittest.expectedFailure
     def test_multiple_select_statements_are_rejected(self) -> None:
         self.assertFalse(csv_query_service._is_safe_select_query("SELECT 1; SELECT 2"))
+        self.assertFalse(
+            csv_query_service._is_safe_select_query(
+                "SELECT * FROM data; SELECT * FROM data"
+            )
+        )
 
-    @unittest.expectedFailure
     def test_external_reader_functions_are_rejected(self) -> None:
-        self.assertFalse(csv_query_service._is_safe_select_query("SELECT * FROM read_csv_auto('/etc/passwd')"))
+        self.assertFalse(
+            csv_query_service._is_safe_select_query(
+                "SELECT * FROM read_csv_auto('/etc/passwd')"
+            )
+        )
+        self.assertFalse(
+            csv_query_service._is_safe_select_query(
+                "SELECT * FROM data WHERE EXISTS "
+                "(SELECT 1 FROM read_parquet('/tmp/secret.parquet'))"
+            )
+        )
+
+    def test_only_data_and_cte_references_are_allowed(self) -> None:
+        allowed_queries = (
+            "SELECT * FROM data",
+            "SELECT * FROM data d JOIN data other ON d.id = other.id",
+            "WITH filtered AS (SELECT * FROM data) SELECT * FROM filtered",
+            "SELECT * FROM data UNION ALL SELECT * FROM data",
+        )
+        rejected_queries = (
+            "SELECT * FROM other",
+            "SELECT * FROM data JOIN other ON true",
+            "WITH hidden AS (SELECT * FROM other) SELECT * FROM hidden",
+            (
+                "WITH first AS (SELECT * FROM hidden), "
+                "second AS (WITH hidden AS (SELECT * FROM data) SELECT * FROM hidden) "
+                "SELECT * FROM first"
+            ),
+            "SELECT * FROM main.data",
+            "SELECT * FROM information_schema.tables",
+        )
+
+        for sql in allowed_queries:
+            with self.subTest(sql=sql):
+                self.assertTrue(csv_query_service._is_safe_select_query(sql))
+
+        for sql in rejected_queries:
+            with self.subTest(sql=sql):
+                self.assertFalse(csv_query_service._is_safe_select_query(sql))
+
+    def test_invalid_or_empty_sql_is_rejected(self) -> None:
+        for sql in ("", " ", "SELECT FROM data", None):
+            with self.subTest(sql=sql):
+                self.assertFalse(csv_query_service._is_safe_select_query(sql))
 
     def test_query_executes_against_parquet_and_limits_rows(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -131,8 +179,14 @@ class CsvQuerySafetyTests(unittest.TestCase):
 
     def test_unsafe_query_is_rejected_before_download(self) -> None:
         with patch.object(csv_query_service, "download_to_temp_file") as download:
-            with self.assertRaises(ValueError):
-                csv_query_service.run_sql_query(parquet_key="x", sql="DELETE FROM data")
+            for sql in (
+                "DELETE FROM data",
+                "SELECT * FROM data; SELECT * FROM data",
+                "SELECT * FROM other",
+                "SELECT * FROM read_csv_auto('/etc/passwd')",
+            ):
+                with self.subTest(sql=sql), self.assertRaises(ValueError):
+                    csv_query_service.run_sql_query(parquet_key="x", sql=sql)
         download.assert_not_called()
 
 

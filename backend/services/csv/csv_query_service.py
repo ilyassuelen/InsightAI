@@ -1,6 +1,7 @@
+import json
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 import duckdb
 
@@ -40,31 +41,77 @@ def _rows_to_dicts(columns: List[str], rows: List[tuple]) -> List[Dict[str, Any]
     ]
 
 
+def _iter_ast_nodes(value: Any) -> Iterator[Dict[str, Any]]:
+    """
+    Yield every object contained in a serialized DuckDB SQL AST.
+    """
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from _iter_ast_nodes(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _iter_ast_nodes(child)
+
+
 def _is_safe_select_query(sql: str) -> bool:
     """
-    Allow only SELECT queries for safety.
+    Allow one parsed SELECT statement that only reads from data or its CTEs.
     """
-    cleaned = (sql or "").strip().lower()
-
-    if not cleaned.startswith("select"):
+    if not isinstance(sql, str) or not sql.strip():
         return False
 
-    forbidden_words = [
-        "insert",
-        "update",
-        "delete",
-        "drop",
-        "alter",
-        "create",
-        "copy",
-        "attach",
-        "detach",
-        "pragma",
-        "install",
-        "load",
-    ]
+    conn: Optional[duckdb.DuckDBPyConnection] = None
 
-    return not any(word in cleaned for word in forbidden_words)
+    try:
+        conn = duckdb.connect(database=":memory:")
+        serialized = conn.execute(
+            "SELECT json_serialize_sql(?)",
+            [sql],
+        ).fetchone()
+        ast = json.loads(serialized[0])
+        referenced_tables = {
+            table_name.casefold()
+            for table_name in conn.get_table_names(sql)
+        }
+    except Exception:
+        return False
+    finally:
+        if conn is not None:
+            conn.close()
+
+    if ast.get("error"):
+        return False
+
+    statements = ast.get("statements")
+    if not isinstance(statements, list) or len(statements) != 1:
+        return False
+
+    root_node = statements[0].get("node")
+    if not isinstance(root_node, dict):
+        return False
+
+    if root_node.get("type") not in {"SELECT_NODE", "SET_OPERATION_NODE"}:
+        return False
+
+    if not referenced_tables.issubset({"data"}):
+        return False
+
+    nodes = list(_iter_ast_nodes(root_node))
+
+    for node in nodes:
+        node_type = node.get("type")
+
+        if node_type == "TABLE_FUNCTION":
+            return False
+
+        if node_type != "BASE_TABLE":
+            continue
+
+        if node.get("catalog_name") or node.get("schema_name"):
+            return False
+
+    return True
 
 
 def open_parquet_from_r2(parquet_key: str) -> tuple[duckdb.DuckDBPyConnection, str]:
