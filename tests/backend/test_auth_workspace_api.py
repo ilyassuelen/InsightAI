@@ -15,6 +15,7 @@ from backend.models.user import User
 from backend.models.workspace import Workspace
 from backend.models.workspace_member import WorkspaceMember
 from backend.services.auth.jwt import create_access_token
+from backend.services.storage import upload_validation
 from tests.support import auth_headers, create_document, reset_database
 
 
@@ -249,10 +250,13 @@ class AuthWorkspaceApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertNotIn(secret, response.text)
 
-    @unittest.expectedFailure
     def test_unauthorized_upload_checks_membership_before_r2_write(self) -> None:
         bob_workspace = self._personal_workspace_id(self.bob_headers)
         with (
+            patch(
+                "backend.routers.document.read_upload_with_limit",
+                new=AsyncMock(return_value=b"text"),
+            ) as read_upload,
             patch("backend.routers.document.upload_file", return_value="documents/orphan.txt") as upload,
             patch("backend.routers.document.process_document_logic", new=AsyncMock()),
         ):
@@ -263,12 +267,10 @@ class AuthWorkspaceApiTests(unittest.TestCase):
                 files={"file": ("private.txt", b"text", "text/plain")},
             )
         self.assertEqual(response.status_code, 403)
+        read_upload.assert_not_awaited()
         upload.assert_not_called()
 
-    @unittest.expectedFailure
     def test_upload_rejects_unsupported_file_type_before_storage(self) -> None:
-        """Known gap: unsupported files are stored and later treated as PDFs."""
-
         with (
             patch("backend.routers.document.upload_file", return_value="documents/file.exe") as upload,
             patch("backend.routers.document.process_document_logic", new=AsyncMock()),
@@ -280,6 +282,95 @@ class AuthWorkspaceApiTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 400)
         upload.assert_not_called()
+
+    def test_upload_rejects_oversized_file_before_storage(self) -> None:
+        with (
+            patch.object(upload_validation, "MAX_UPLOAD_SIZE_BYTES", 5),
+            patch("backend.routers.document.upload_file") as upload,
+        ):
+            response = self.client.post(
+                "/documents/upload",
+                headers=self.alice_headers,
+                files={"file": ("large.txt", b"123456", "text/plain")},
+            )
+
+        self.assertEqual(response.status_code, 413)
+        upload.assert_not_called()
+
+    def test_upload_rejects_disguised_file_before_storage(self) -> None:
+        with patch("backend.routers.document.upload_file") as upload:
+            response = self.client.post(
+                "/documents/upload",
+                headers=self.alice_headers,
+                files={"file": ("fake.pdf", b"this is plain text", "application/pdf")},
+            )
+
+        self.assertEqual(response.status_code, 400)
+        upload.assert_not_called()
+
+    def test_upload_uses_validated_filename_and_content_type(self) -> None:
+        with (
+            patch(
+                "backend.routers.document.upload_file",
+                return_value="documents/validated.txt",
+            ) as upload,
+            patch("backend.routers.document.delete_file") as cleanup,
+            patch(
+                "backend.routers.document.process_document_logic",
+                new=AsyncMock(),
+            ),
+        ):
+            response = self.client.post(
+                "/documents/upload",
+                headers=self.alice_headers,
+                files={"file": ("notes.txt", b"Valid UTF-8 text", "application/octet-stream")},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        upload.assert_called_once_with(b"Valid UTF-8 text", "notes.txt")
+        cleanup.assert_not_called()
+
+        db = SessionLocal()
+        try:
+            document = db.query(Document).filter(
+                Document.id == response.json()["document_id"]
+            ).one()
+            self.assertEqual(document.filename, "notes.txt")
+            self.assertEqual(document.file_type, "text/plain")
+        finally:
+            db.close()
+
+    def test_upload_cleans_r2_object_when_database_commit_fails(self) -> None:
+        workspace_id = self._personal_workspace_id(self.alice_headers)
+        filename = f"commit-failure-{uuid.uuid4().hex}.txt"
+        router_db = SessionLocal()
+
+        with (
+            patch("backend.routers.document.SessionLocal", return_value=router_db),
+            patch.object(router_db, "commit", side_effect=RuntimeError("database unavailable")),
+            patch(
+                "backend.routers.document.upload_file",
+                return_value="documents/orphan.txt",
+            ),
+            patch("backend.routers.document.delete_file") as cleanup,
+        ):
+            response = self.client.post(
+                "/documents/upload",
+                headers=self.alice_headers,
+                data={"workspace_id": str(workspace_id)},
+                files={"file": (filename, b"Valid UTF-8 text", "text/plain")},
+            )
+
+        self.assertEqual(response.status_code, 500)
+        cleanup.assert_called_once_with("documents/orphan.txt")
+
+        db = SessionLocal()
+        try:
+            self.assertIsNone(
+                db.query(Document).filter(Document.filename == filename).first()
+            )
+        finally:
+            db.close()
 
 
 if __name__ == "__main__":

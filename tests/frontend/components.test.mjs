@@ -41,7 +41,7 @@ test("chat renders selected document context and close affordance", () => {
 
 test("upload zone renders supported user-facing document formats", () => {
   const html = render.renderUpload();
-  for (const label of [".pdf", ".docx", ".txt", ".csv"]) {
+  for (const label of [".pdf", ".docx", ".txt", ".md", ".csv"]) {
     assert.match(html, new RegExp(label.replace(".", "\\.")));
   }
   assert.match(html, /aria-label="Upload document"/);
@@ -49,7 +49,7 @@ test("upload zone renders supported user-facing document formats", () => {
 });
 
 
-test.todo("upload input accepts exactly the formats handled by the backend", () => {
+test("upload input accepts exactly the formats handled by the backend", () => {
   const html = render.renderUpload();
   const acceptedFormats = html.match(/accept="([^"]+)"/)?.[1];
   assert.equal(acceptedFormats, ".pdf,.docx,.txt,.md,.csv");

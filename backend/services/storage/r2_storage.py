@@ -39,11 +39,19 @@ def upload_file(file_bytes: bytes, filename: str) -> str:
 
     logger.info(f"Uploading file to R2 bucket '{R2_BUCKET}' → key={key}")
 
-    s3_client.put_object(
-        Bucket=R2_BUCKET,
-        Key=key,
-        Body=file_bytes
-    )
+    try:
+        s3_client.put_object(
+            Bucket=R2_BUCKET,
+            Key=key,
+            Body=file_bytes
+        )
+    except Exception:
+        logger.exception(f"Upload failed for key={key}; attempting cleanup")
+        try:
+            s3_client.delete_object(Bucket=R2_BUCKET, Key=key)
+        except Exception:
+            logger.exception(f"Cleanup after failed upload also failed for key={key}")
+        raise
 
     logger.info(f"Upload successful → key={key}")
 

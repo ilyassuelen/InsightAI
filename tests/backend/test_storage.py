@@ -30,6 +30,48 @@ class R2StorageTests(unittest.TestCase):
             Key="documents/id.txt",
             Body=b"content",
         )
+        client.delete_object.assert_not_called()
+
+    def test_failed_upload_attempts_cleanup_with_generated_key(self) -> None:
+        client = MagicMock()
+        client.put_object.side_effect = RuntimeError("upload failed")
+
+        with (
+            patch.object(r2_storage, "s3_client", client),
+            patch.object(
+                r2_storage,
+                "generate_storage_key",
+                return_value="documents/partial.txt",
+            ),
+            self.assertRaisesRegex(RuntimeError, "upload failed"),
+        ):
+            r2_storage.upload_file(b"content", "sample.txt")
+
+        client.delete_object.assert_called_once_with(
+            Bucket=r2_storage.R2_BUCKET,
+            Key="documents/partial.txt",
+        )
+
+    def test_cleanup_failure_does_not_mask_original_upload_error(self) -> None:
+        client = MagicMock()
+        upload_error = RuntimeError("upload failed")
+        client.put_object.side_effect = upload_error
+        client.delete_object.side_effect = RuntimeError("cleanup failed")
+
+        with (
+            patch.object(r2_storage, "s3_client", client),
+            patch.object(
+                r2_storage,
+                "generate_storage_key",
+                return_value="documents/partial.txt",
+            ),
+            patch.object(r2_storage.logger, "exception") as log_exception,
+            self.assertRaises(RuntimeError) as raised,
+        ):
+            r2_storage.upload_file(b"content", "sample.txt")
+
+        self.assertIs(raised.exception, upload_error)
+        self.assertEqual(log_exception.call_count, 2)
 
     def test_download_writes_to_temporary_file(self) -> None:
         client = MagicMock()

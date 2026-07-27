@@ -90,6 +90,14 @@ def is_csv_file(document: Document) -> bool:
     return document.file_type in ("text/csv", "application/csv") or document.filename.lower().endswith(".csv")
 
 
+def cleanup_failed_upload(storage_key: str):
+    """Best-effort compensation for an R2 object without a committed document."""
+    try:
+        delete_file(storage_key)
+    except Exception:
+        logger.exception(f"Failed to clean up R2 object after upload error: {storage_key}")
+
+
 def upsert_chunks_to_vectorstore(db, document):
     """
     Loads text-based document chunks from the database and inserts them into Qdrant.
@@ -390,7 +398,16 @@ async def upload_document(
     current_user: User = Depends(get_current_user),
 ):
     db = SessionLocal()
+    storage_key = None
+    storage_cleanup_required = False
+
     try:
+        if workspace_id is None:
+            ws = WorkspaceService.get_personal_workspace(db, current_user.id)
+            workspace_id = ws.id
+        else:
+            WorkspaceService.require_member(db, workspace_id, current_user.id)
+
         try:
             file_bytes = await read_upload_with_limit(file)
             validated_upload = validate_upload(file.filename, file_bytes)
@@ -398,12 +415,7 @@ async def upload_document(
             raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
         storage_key = upload_file(file_bytes, validated_upload.filename)
-
-        if workspace_id is None:
-            ws = WorkspaceService.get_personal_workspace(db, current_user.id)
-            workspace_id = ws.id
-        else:
-            WorkspaceService.require_member(db, workspace_id, current_user.id)
+        storage_cleanup_required = True
 
         document = Document(
             filename=validated_upload.filename,
@@ -417,6 +429,7 @@ async def upload_document(
 
         db.add(document)
         db.commit()
+        storage_cleanup_required = False
         db.refresh(document)
 
         logger.info(
@@ -441,6 +454,8 @@ async def upload_document(
         logger.exception(f"Upload failed: {e}")
         raise HTTPException(status_code=500, detail="Document upload failed")
     finally:
+        if storage_cleanup_required and storage_key:
+            cleanup_failed_upload(storage_key)
         await file.close()
         db.close()
 

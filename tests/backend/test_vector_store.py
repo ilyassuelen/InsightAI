@@ -107,7 +107,8 @@ class VectorStoreTests(unittest.TestCase):
         self.assertEqual(len(hits), 1)
         self.assertEqual(hits[0]["text"], "Relevant evidence")
         self.assertEqual(hits[0]["metadata"]["page_start"], 7)
-        self.assertEqual(hits[0]["distance"], 0.91)
+        self.assertEqual(hits[0]["score"], 0.91)
+        self.assertNotIn("distance", hits[0])
         kwargs = fake_client.query_points.call_args.kwargs
         self.assertEqual(kwargs["limit"], 3)
         condition = kwargs["query_filter"].must[0]
@@ -119,10 +120,7 @@ class VectorStoreTests(unittest.TestCase):
         with patch.object(vector_store, "embed_texts_openai", return_value=[]):
             self.assertEqual(vector_store.query_similar_chunks(1, "question"), [])
 
-    @unittest.expectedFailure
     def test_query_uses_canonical_score_name_for_report_sorting(self) -> None:
-        """Known defect: report_service sorts by score, vector_store returns distance."""
-
         point = SimpleNamespace(id="p", score=0.9, payload={"_text": "x"})
         fake_client = MagicMock()
         fake_client.get_collections.return_value = SimpleNamespace(collections=[])
@@ -132,7 +130,8 @@ class VectorStoreTests(unittest.TestCase):
             patch.object(vector_store, "embed_texts_openai", return_value=[[0.1]]),
         ):
             hit = vector_store.query_similar_chunks(1, "q", 1)[0]
-        self.assertIn("score", hit)
+        self.assertEqual(hit["score"], 0.9)
+        self.assertNotIn("distance", hit)
 
 
 if __name__ == "__main__":

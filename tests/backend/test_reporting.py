@@ -68,7 +68,7 @@ class ReportGenerationTests(unittest.TestCase):
                 "id": f"chunk-{index}",
                 "text": f"Evidence {index}",
                 "metadata": {"page_start": index, "page_end": index, "section_title": "S"},
-                "distance": 1.0 - index / 100,
+                "score": 1.0 - index / 100,
             }
             for index in range(20)
         ]
@@ -99,7 +99,7 @@ class ReportGenerationTests(unittest.TestCase):
 
     @unittest.expectedFailure
     def test_model_cannot_return_sources_outside_retrieved_evidence(self) -> None:
-        hits = [{"id": "real", "text": "Evidence", "metadata": {}, "distance": 0.9}]
+        hits = [{"id": "real", "text": "Evidence", "metadata": {}, "score": 0.9}]
         forged = [{"chunk_id": "fabricated", "page_start": None, "page_end": None, "section_title": None}]
         with (
             patch.object(report_service, "query_similar_chunks", return_value=hits),
@@ -121,14 +121,37 @@ class ReportGenerationTests(unittest.TestCase):
             )
         self.assertEqual([source["chunk_id"] for source in section.sources], ["real"])
 
-    @unittest.expectedFailure
     def test_multi_query_results_are_sorted_by_qdrant_relevance(self) -> None:
-        """Known defect: hits expose `distance`, while sorting reads `score`."""
-
         def query(*, query: str, **_: object):
             if query == "low":
-                return [{"id": "low", "text": "LOW", "metadata": {}, "distance": 0.1}]
-            return [{"id": "high", "text": "HIGH", "metadata": {}, "distance": 0.9}]
+                return [
+                    {
+                        "id": "low",
+                        "text": "LOW",
+                        "metadata": {"page_start": 1},
+                        "score": 0.1,
+                    },
+                    {
+                        "id": "page-two",
+                        "text": "PAGE_TWO",
+                        "metadata": {"page_start": 2},
+                        "score": 0.2,
+                    },
+                ]
+            return [
+                {
+                    "id": "high",
+                    "text": "HIGH",
+                    "metadata": {"page_start": 1},
+                    "score": 0.9,
+                },
+                {
+                    "id": "medium",
+                    "text": "MEDIUM",
+                    "metadata": {"page_start": 1},
+                    "score": 0.8,
+                },
+            ]
 
         captured: dict[str, str] = {}
 
@@ -153,7 +176,9 @@ class ReportGenerationTests(unittest.TestCase):
                 )
             )
 
-        self.assertLess(captured["prompt"].index("HIGH"), captured["prompt"].index("LOW"))
+        self.assertLess(captured["prompt"].index("HIGH"), captured["prompt"].index("MEDIUM"))
+        self.assertLess(captured["prompt"].index("MEDIUM"), captured["prompt"].index("PAGE_TWO"))
+        self.assertNotIn("LOW", captured["prompt"])
 
 
 if __name__ == "__main__":
