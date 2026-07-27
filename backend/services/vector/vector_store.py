@@ -175,7 +175,7 @@ def query_similar_chunks(document_id: int, query: str, k: int = 5) -> List[Dict]
                     "page_end": payload.get("page_end"),
                     "section_title": payload.get("section_title"),
                 },
-                "distance": getattr(p, "score", None),
+                "score": getattr(p, "score", None),
             }
         )
     return hits

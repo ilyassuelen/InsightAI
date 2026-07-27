@@ -296,7 +296,7 @@ async def generate_section(
             filtered_hits = []
 
             all_hits.sort(
-                key=lambda x: x.get("score", 0),
+                key=lambda x: x.get("score") or 0,
                 reverse=True
             )
 
