@@ -18,6 +18,7 @@ SUPPORTED_CONTENT_TYPES = {
     ".pdf": "application/pdf",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".txt": "text/plain",
+    ".md": "text/markdown",
     ".csv": "text/csv",
 }
 

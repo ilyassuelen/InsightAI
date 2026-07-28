@@ -72,7 +72,7 @@ export function UploadZone({ onUpload }: UploadZoneProps) {
           type="file"
           onChange={handleFileSelect}
           className="sr-only"
-          accept=".pdf,.docx,.txt,.csv"
+          accept=".pdf,.docx,.txt,.md,.csv"
           aria-label="Upload document"
         />
 
@@ -103,12 +103,12 @@ export function UploadZone({ onUpload }: UploadZoneProps) {
           </h2>
 
           <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-            Upload a PDF, DOCX, TXT or CSV file. InsightAI will parse
+            Upload a PDF, DOCX, TXT, Markdown or CSV file. InsightAI will parse
             it, create chunks, store embeddings and generate a structured report.
           </p>
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-            {["PDF", "DOCX", "TXT", "CSV"].map((type) => (
+            {["PDF", "DOCX", "TXT", "MD", "CSV"].map((type) => (
               <span
                 key={type}
                 className="rounded-full border border-border/70 bg-background/50 px-3 py-1 text-xs font-mono text-muted-foreground"

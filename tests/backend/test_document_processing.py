@@ -50,7 +50,7 @@ class DocumentProcessingTests(unittest.TestCase):
 
         with (
             patch.object(document_router, "download_to_temp_file", return_value=local_file),
-            patch.object(document_router, "get_chunking_services", return_value=(chunk_text, chunk_pdf, 1000)),
+            patch.object(document_router, "get_chunking_services", return_value=(chunk_text, chunk_pdf, 800)),
             patch.object(document_router, "get_block_services", return_value=(create_blocks, structure_blocks)),
             patch.object(document_router, "get_report_service", return_value=generate_report),
             patch.object(document_router, "get_vector_services", return_value=(MagicMock(), delete_vectors)),
@@ -61,6 +61,8 @@ class DocumentProcessingTests(unittest.TestCase):
         self.assertEqual(self._document_status(document.id), "completed")
         self.assertFalse(local_file.exists())
         chunk_text.assert_called_once()
+        self.assertEqual(chunk_text.call_args.kwargs["max_tokens"], 800)
+        self.assertFalse(chunk_text.call_args.kwargs["split_markdown_headings"])
         chunk_pdf.assert_not_called()
         upsert.assert_called_once()
         create_blocks.assert_called_once_with(document_id=document.id, parse_id=None)
@@ -74,6 +76,50 @@ class DocumentProcessingTests(unittest.TestCase):
             self.assertEqual(report.content["title"], "Test")
         finally:
             db.close()
+
+    def test_markdown_pipeline_enables_heading_boundaries(self) -> None:
+        document = create_document(
+            self.workspace.id,
+            self.user.id,
+            filename="notes.md",
+            file_type="text/markdown",
+            status="uploaded",
+        )
+        local_file = self._temp_file(".md", "# Heading\nGrounded content")
+        chunk_text = MagicMock(return_value=(1, 1))
+
+        with (
+            patch.object(document_router, "download_to_temp_file", return_value=local_file),
+            patch.object(
+                document_router,
+                "get_chunking_services",
+                return_value=(chunk_text, MagicMock(), 800),
+            ),
+            patch.object(
+                document_router,
+                "get_block_services",
+                return_value=(MagicMock(return_value=1), AsyncMock(return_value=[])),
+            ),
+            patch.object(
+                document_router,
+                "get_report_service",
+                return_value=AsyncMock(
+                    return_value={"title": "Test", "sections": [], "conclusion": "Done"}
+                ),
+            ),
+            patch.object(
+                document_router,
+                "get_vector_services",
+                return_value=(MagicMock(), MagicMock()),
+            ),
+            patch.object(document_router, "upsert_chunks_to_vectorstore"),
+        ):
+            asyncio.run(document_router.process_document_logic(document.id))
+
+        self.assertEqual(self._document_status(document.id), "completed")
+        self.assertFalse(local_file.exists())
+        chunk_text.assert_called_once()
+        self.assertTrue(chunk_text.call_args.kwargs["split_markdown_headings"])
 
     def test_csv_pipeline_skips_embeddings_and_uses_structured_report(self) -> None:
         document = create_document(
@@ -97,7 +143,7 @@ class DocumentProcessingTests(unittest.TestCase):
 
         with (
             patch.object(document_router, "download_to_temp_file", return_value=local_file),
-            patch.object(document_router, "get_chunking_services", return_value=(chunk_text, chunk_pdf, 1000)),
+            patch.object(document_router, "get_chunking_services", return_value=(chunk_text, chunk_pdf, 800)),
             patch.object(document_router, "get_block_services", return_value=(create_blocks, structure_blocks)),
             patch.object(document_router, "get_report_service", return_value=text_report),
             patch.object(document_router, "get_vector_services", return_value=(MagicMock(), MagicMock())),
@@ -147,7 +193,7 @@ class DocumentProcessingTests(unittest.TestCase):
         with (
             patch.object(document_router, "download_to_temp_file", return_value=local_file),
             patch.object(document_router, "parse_txt", side_effect=RuntimeError("parse failed")),
-            patch.object(document_router, "get_chunking_services", return_value=(MagicMock(), MagicMock(), 1000)),
+            patch.object(document_router, "get_chunking_services", return_value=(MagicMock(), MagicMock(), 800)),
             patch.object(document_router, "get_block_services", return_value=(MagicMock(), AsyncMock())),
             patch.object(document_router, "get_report_service", return_value=AsyncMock()),
             patch.object(document_router, "get_vector_services", return_value=(MagicMock(), MagicMock())),

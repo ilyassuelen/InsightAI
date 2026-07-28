@@ -8,7 +8,7 @@ const steps = [
     icon: Upload,
     title: "Upload files",
     description:
-      "Add PDFs, DOCX, TXT or CSV files to a personal or shared team workspace.",
+      "Add PDFs, DOCX, TXT, Markdown or CSV files to a personal or shared team workspace.",
     color: "from-violet-500 to-fuchsia-500",
   },
   {

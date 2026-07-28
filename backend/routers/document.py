@@ -250,6 +250,7 @@ async def process_document_logic(document_id: int):
                 parse_id=None,
                 text=full_text,
                 max_tokens=MAX_TOKENS,
+                split_markdown_headings=document.file_type == "text/markdown",
             )
             db.commit()
 

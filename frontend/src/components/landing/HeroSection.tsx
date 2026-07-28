@@ -52,7 +52,7 @@ export function HeroSection({ onStartAgent }: HeroSectionProps) {
             transition={{ duration: 0.65, delay: 0.16 }}
             className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground"
           >
-            Upload PDFs, DOCX, TXT or CSV files. InsightAI extracts key
+            Upload PDFs, DOCX, TXT, Markdown or CSV files. InsightAI extracts key
             information, creates grounded reports and lets you ask questions
             directly against your sources.
           </motion.p>
