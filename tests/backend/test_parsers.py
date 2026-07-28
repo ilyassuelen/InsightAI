@@ -45,6 +45,58 @@ class DocxParserTests(unittest.TestCase):
 
             self.assertEqual(parse_docx(path), "First paragraph\n\nSecond paragraph")
 
+    def test_docx_parser_preserves_headings_lists_tables_and_order(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "structured.docx"
+            document = WordDocument()
+            document.add_heading("Overview", level=1)
+            document.add_paragraph("Introductory paragraph")
+            document.add_paragraph("First item", style="List Bullet")
+            document.add_paragraph("Nested item", style="List Bullet 2")
+            document.add_paragraph("Numbered item", style="List Number")
+
+            table = document.add_table(rows=2, cols=2)
+            table.cell(0, 0).text = "Name"
+            table.cell(0, 1).text = "Value"
+            table.cell(1, 0).text = "A | B"
+            table.cell(1, 1).text = "10"
+
+            document.add_heading("Details", level=2)
+            document.add_paragraph("Closing paragraph")
+            document.save(path)
+
+            self.assertEqual(
+                parse_docx(path),
+                (
+                    "# Overview\n\n"
+                    "Introductory paragraph\n\n"
+                    "- First item\n"
+                    "    - Nested item\n"
+                    "1. Numbered item\n\n"
+                    "| Name | Value |\n"
+                    "| --- | --- |\n"
+                    "| A \\| B | 10 |\n\n"
+                    "## Details\n\n"
+                    "Closing paragraph"
+                ),
+            )
+
+    def test_docx_parser_supports_custom_outline_heading_styles(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "custom-heading.docx"
+            document = WordDocument()
+            style = document.styles.add_style("Insight Section", 1)
+            style.paragraph_format.keep_with_next = True
+            style.element.get_or_add_pPr().get_or_add_outlineLvl().val = 2
+            document.add_paragraph("Custom section", style=style)
+            document.add_paragraph("Section content")
+            document.save(path)
+
+            self.assertEqual(
+                parse_docx(path),
+                "### Custom section\n\nSection content",
+            )
+
     def test_docx_parser_rejects_missing_file(self) -> None:
         with self.assertRaises(FileNotFoundError):
             parse_docx("/tmp/insightai-definitely-missing.docx")

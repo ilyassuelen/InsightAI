@@ -121,6 +121,52 @@ class DocumentProcessingTests(unittest.TestCase):
         chunk_text.assert_called_once()
         self.assertTrue(chunk_text.call_args.kwargs["split_markdown_headings"])
 
+    def test_docx_pipeline_enables_heading_boundaries(self) -> None:
+        document = create_document(
+            self.workspace.id,
+            self.user.id,
+            filename="report.docx",
+            file_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            status="uploaded",
+        )
+        local_file = self._temp_file(".docx", "placeholder")
+        chunk_text = MagicMock(return_value=(1, 1))
+
+        with (
+            patch.object(document_router, "download_to_temp_file", return_value=local_file),
+            patch.object(document_router, "parse_docx", return_value="# Heading\n\nContent"),
+            patch.object(
+                document_router,
+                "get_chunking_services",
+                return_value=(chunk_text, MagicMock(), 800),
+            ),
+            patch.object(
+                document_router,
+                "get_block_services",
+                return_value=(MagicMock(return_value=1), AsyncMock(return_value=[])),
+            ),
+            patch.object(
+                document_router,
+                "get_report_service",
+                return_value=AsyncMock(
+                    return_value={"title": "Test", "sections": [], "conclusion": "Done"}
+                ),
+            ),
+            patch.object(
+                document_router,
+                "get_vector_services",
+                return_value=(MagicMock(), MagicMock()),
+            ),
+            patch.object(document_router, "upsert_chunks_to_vectorstore"),
+        ):
+            asyncio.run(document_router.process_document_logic(document.id))
+
+        self.assertEqual(self._document_status(document.id), "completed")
+        self.assertFalse(local_file.exists())
+        chunk_text.assert_called_once()
+        self.assertEqual(chunk_text.call_args.kwargs["text"], "# Heading\n\nContent")
+        self.assertTrue(chunk_text.call_args.kwargs["split_markdown_headings"])
+
     def test_csv_pipeline_skips_embeddings_and_uses_structured_report(self) -> None:
         document = create_document(
             self.workspace.id,
