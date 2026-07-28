@@ -1,231 +1,426 @@
 <p align="center">
-  <img src="frontend/public/logo.png" alt="InsightAI Logo" width="300"/>
+  <img src="frontend/public/logo.png" alt="InsightAI logo" width="300"/>
 </p>
-> Transform PDF, CSV, DOCX and TXT files into structured AI reports and searchable knowledge.
-
-![License: MIT](https://img.shields.io/badge/license-MIT-brightgreen)
-![Python ≥3.10](https://img.shields.io/badge/python-%3E%3D3.10-blue)
-![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688)
-![Vector DB](https://img.shields.io/badge/vector%20db-Qdrant-red)
-![AI: OpenAI + Gemini](https://img.shields.io/badge/AI-OpenAI%20%2B%20Gemini-purple)
-![React](https://img.shields.io/badge/frontend-React-61DAFB)
-![Node ≥18](https://img.shields.io/badge/node-%3E%3D18-green)
-
----
-
-**InsightAI** is an AI-powered document intelligence platform for analyzing PDF, CSV, DOCX and TXT files using Retrieval-Augmented Generation (RAG) and scalable LLM pipelines.
-
-The system supports **automated parsing, intelligent chunking, Qdrant-based vector retrieval, structured AI report generation, and workspace-wide AI chat across uploaded documents**.
-
-> **Current Capabilities:**  
-> - Multi-user team workspaces  
-> - Role-based access control
-> - Workspace-scoped document isolation
-> - AI-powered structured reporting
-> - Workspace-wide document chat
-> - Multi-format ingestion (PDF, CSV, DOCX, TXT)
-
----
-
-## 🖥️ User Interface Preview
-
-### 🎬 Application Demo
-
-Short walkthrough showing the full InsightAI UI.
 
 <p align="center">
-  <img src="static/images/insightai-preview.gif" alt="InsightAI Application Demo" width="900"/>
+  Turn documents and tabular data into grounded reports and searchable workspace knowledge.
 </p>
 
----
+<p align="center">
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-brightgreen">
+  <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-blue">
+  <img alt="Node.js 18+" src="https://img.shields.io/badge/node.js-18%2B-green">
+  <img alt="Backend: FastAPI" src="https://img.shields.io/badge/backend-FastAPI-009688">
+  <img alt="Frontend: React" src="https://img.shields.io/badge/frontend-React-61DAFB">
+  <img alt="Vector database: Qdrant" src="https://img.shields.io/badge/vector%20database-Qdrant-red">
+</p>
 
-## Live Preview
+## Overview
 
-Frontend preview: [https://insightai-lyart.vercel.app/](https://insightai-lyart.vercel.app/)
+**InsightAI** is a multi-tenant document intelligence platform for PDF, DOCX, TXT, Markdown and CSV files. It combines workspace-scoped access, document processing, evidence-grounded generation and two deliberately separate analysis paths:
 
-> Note: The hosted preview runs with limited free-tier backend resources.  
-> For reliable document processing, run the project locally or deploy the backend on a production-grade instance.
+- **Text documents** use parsing, 800-token chunks with 80-token overlap, OpenAI embeddings, Qdrant retrieval and grounded LLM generation.
+- **CSV files** use Parquet, DuckDB profiling and AST-validated read-only SQL instead of row-based RAG.
 
----
+Users can create personal or shared workspaces, generate structured reports and ask questions across a workspace or within a selected document.
 
-## ⚡ Key Features
+## Table of Contents
 
-- **Document Upload:** Supports PDF, CSV, DOCX and TXT files.
-- **Scalable CSV Processing**  
-  Memory-safe streaming & token-aware chunking.  
-  Successfully tested with **25,000+ row CSV files**.
-- **RAG-Based AI Reports**  
-  Structured summaries, key figures, findings, risks, and conclusions generated strictly from document evidence.
-- **Multi-Language Report Generation**
-  Generate reports in any supported language directly from the dashboard (e.g. EN, DE, FR, ES, AR, CN etc.).
-- **Workspace-Wide AI Chat & Retrieval:** Ask questions across all uploaded workspace documents using semantic retrieval and RAG-based context generation.
-- **Team Workspaces & Collaboration**
-  - Personal and shared team spaces
-  - Role-based access (Owner / Member)
-  - Secure document isolation
-  - Member management
-- **Workspace-Scoped Retrieval**  
-  Vector search and document retrieval are strictly isolated per workspace to ensure secure multi-user environments.
-- **OpenAI + Gemini Fallback**  
-  Automatic fallback to **Google Gemini** when OpenAI hits:
-  - 429 rate limits  
-  - token limits  
-  - temporary API failures
-- **Robust Processing Pipeline**  
-  Chunking, embedding, **Qdrant-based vector storage**, block structuring, reporting and **LLM tracing via Langfuse** for debugging and monitoring.
-- **Modern AI Workspace Interface:** Glassmorphism-inspired dashboard optimized for structured reporting, document intelligence workflows, and collaborative AI analysis.
+- [Demo](#demo)
+- [Why InsightAI](#why-insightai)
+- [Supported Formats](#supported-formats)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Testing](#testing)
+- [Security and Data Boundaries](#security-and-data-boundaries)
+- [Technology Stack](#technology-stack)
+- [Project Structure](#project-structure)
+- [Current Limitations](#current-limitations)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
 
----
+## Demo
 
-## 🛠 Installation
+<p align="center">
+  <img src="static/images/insightai-preview.gif" alt="InsightAI application walkthrough" width="900"/>
+</p>
+
+**Live frontend:** [insightai-lyart.vercel.app](https://insightai-lyart.vercel.app/)
+
+> The hosted preview uses limited free-tier backend resources. For reliable document processing, run InsightAI locally or deploy the backend with production-grade resources.
+
+## Why InsightAI?
+
+- **Two analysis strategies:** semantic RAG for unstructured text and executed SQL for structured CSV data.
+- **Structured reports:** summaries, sections, key figures, findings, risks, recommendations, charts, timelines and conclusions.
+- **Workspace-scoped access:** personal and shared workspaces with Owner and Member roles.
+- **Document and workspace chat:** retrieve evidence from one document or across authorized workspace documents.
+- **Validated uploads:** server-side format, size and content validation before storage.
+- **Controlled chunking:** maximum 800 tokens, 80-token overlap and Unicode-safe boundaries.
+- **Markdown awareness:** ATX and Setext headings create section boundaries; fenced code is excluded from heading detection.
+- **Hybrid retrieval:** semantic Qdrant search combined with relational keyword matching.
+- **Structured CSV analysis:** Parquet storage, DuckDB profiling and exactly one AST-validated query against the `data` table.
+- **Privacy-conscious observability:** optional Langfuse tracing based primarily on hashes, lengths and operational metadata.
+- **Modern interface:** React dashboard for uploads, reports, workspaces and AI chat.
+
+## Supported Formats
+
+| Format | Parsing and preparation | Analysis path |
+|---|---|---|
+| PDF | Docling, OCR heuristic, contextual headings, 800-token limit | Embeddings, Qdrant and RAG |
+| DOCX | Paragraph extraction and 800/80 token windows | Embeddings, Qdrant and RAG |
+| TXT | UTF-8 text and 800/80 token windows | Embeddings, Qdrant and RAG |
+| Markdown | Heading-aware sections and 800/80 windows inside each section | Embeddings, Qdrant and RAG |
+| CSV | Validation, Parquet conversion and DuckDB profiling | AST-validated read-only SQL |
+
+The default upload limit is **25 MiB** and can be changed with `MAX_UPLOAD_SIZE_MB`.
+
+## Architecture
+
+```mermaid
+flowchart TD
+    USER["User"] --> UI["React / TypeScript UI"]
+    UI --> API["FastAPI API"]
+    API --> AUTH["JWT authentication and workspace authorization"]
+    API --> DB["PostgreSQL or SQLite"]
+    API --> R2["Cloudflare R2"]
+    API --> TYPE{"Document type"}
+
+    TYPE -->|"PDF, DOCX, TXT, Markdown"| TEXT["Text parsing"]
+    TEXT --> CHUNKS["800-token chunks / 80-token overlap"]
+    CHUNKS --> EMB["OpenAI embeddings"]
+    EMB --> QDRANT["Qdrant"]
+    QDRANT --> RETRIEVAL["Workspace-scoped retrieval"]
+
+    TYPE -->|"CSV"| PARQUET["Parquet conversion"]
+    PARQUET --> DUCKDB["DuckDB profile and SQL"]
+    DUCKDB --> SQLSAFE["Single-statement AST validation"]
+
+    RETRIEVAL --> OUTPUT["Grounded chat and reports"]
+    SQLSAFE --> OUTPUT
+    OUTPUT --> LLM["OpenAI structured generation / optional Gemini fallback"]
+```
+
+### Text pipeline
+
+1. Validate workspace membership, filename, size and actual file content.
+2. Store the original object in R2 and create its relational document record.
+3. Parse the document and create Unicode-safe chunks of at most 800 tokens.
+4. Apply 80 tokens of overlap within hard token windows.
+5. Preserve PDF context and Markdown heading metadata where available.
+6. Generate `text-embedding-3-small` embeddings and store them in Qdrant.
+7. Retrieve workspace-authorized evidence for chat and reports.
+8. Generate structured output grounded in the retrieved content.
+
+### CSV pipeline
+
+1. Validate and store the CSV file.
+2. Convert it to Parquet and create a DuckDB-based data profile.
+3. Give the LLM the schema, summary and a small sample.
+4. Parse the generated SQL into a DuckDB AST before any data download.
+5. Allow exactly one read-only query and only the unqualified `data` table.
+6. Reject external readers, table functions, additional statements and other tables.
+7. Execute the accepted query and generate an answer from its result.
+
+## Quick Start
 
 ### Prerequisites
 
-- Node.js >= 18  
-- Python >= 3.10  
-- Git  
+- Python 3.10 or newer
+- Node.js 18 or newer
+- Git
+- Docker for local Qdrant, or access to Qdrant Cloud
+- An OpenAI API key
+- A Cloudflare R2 bucket and API credentials for document uploads
 
-### Quick Start (macOS / Linux / Windows PowerShell):
+### 1. Clone the repository
 
-#### 1. Clone the repository
 ```bash
-git clone https://github.com/ilyassuelen/InsightAI
+git clone https://github.com/ilyassuelen/InsightAI.git
 cd InsightAI
 ```
 
-#### 2. Vector Database (Qdrant)
-InsightAI uses **Qdrant** as the vector database and supports both:
-- local Qdrant instances
-- hosted Qdrant Cloud clusters
+All backend commands below must be run from the **project root**.
 
-For local development, you can start Qdrant via Docker:
+### 2. Create the backend environment
+
+macOS and Linux:
 
 ```bash
-docker run -p 6333:6333 -p 6334:6334 \
-  -v $(pwd)/backend/storage/qdrant_storage:/qdrant/storage \
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Windows PowerShell:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+### 3. Configure the backend
+
+Create `.env` in the project root:
+
+```dotenv
+OPENAI_API_KEY=your-openai-api-key
+JWT_SECRET_KEY=replace-with-a-long-random-secret
+
+QDRANT_URL=http://localhost:6333
+QDRANT_COLLECTION=insightai_chunks
+
+R2_ACCOUNT_ID=your-cloudflare-account-id
+R2_ACCESS_KEY_ID=your-r2-access-key-id
+R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
+R2_BUCKET=your-r2-bucket
+
+CORS_ORIGINS=http://localhost:8080
+```
+
+SQLite is used automatically when `DATABASE_URL` is omitted.
+
+### 4. Start Qdrant locally
+
+```bash
+docker volume create insightai_qdrant_data
+docker run --name insightai-qdrant \
+  -p 6333:6333 \
+  -p 6334:6334 \
+  -v insightai_qdrant_data:/qdrant/storage \
   qdrant/qdrant
 ```
 
-#### 3. Start Backend
+If the container already exists, start it with:
 
 ```bash
-# Backend setup
-cd backend
-python -m venv .venv
+docker start insightai-qdrant
+```
 
-# Linux/macOS
-source .venv/bin/activate
-# Windows PowerShell
-.\.venv\Scripts\Activate.ps1
+Skip this step when using Qdrant Cloud and set `QDRANT_URL` and `QDRANT_API_KEY` accordingly.
 
-pip install -r requirements.txt
+### 5. Start the backend
+
+```bash
 uvicorn backend.main:app --reload
 ```
 
-#### 4. Start Frontend
+- API: [http://localhost:8000](http://localhost:8000)
+- Interactive API documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+### 6. Install and start the frontend
+
+In a second terminal:
 
 ```bash
-cd ../frontend
+cd frontend
 npm install
 npm run dev
 ```
 
-## ⚙️ Configuration
+The frontend is available at [http://localhost:8080](http://localhost:8080).
 
-Create a `.env` file in the **project root**:
+The local API URL defaults to `http://localhost:8000`. For another backend, create `frontend/.env`:
 
-| Name                  | Required | Description |
-|------------------------|----------|-------------|
-| OPENAI_API_KEY         | ✅ | OpenAI API key for AI report generation |
-| GEMINI_API_KEY         | ❌ | Optional Gemini fallback API key |
-| DATABASE_URL           | ❌ | PostgreSQL connection string (SQLite fallback supported) |
-| JWT_SECRET_KEY         | ✅ | Secret key for JWT authentication |
-| QDRANT_URL             | ✅ | Qdrant instance or cloud cluster URL |
-| QDRANT_API_KEY         | ❌ | API key for Qdrant Cloud authentication |
-| QDRANT_COLLECTION      | ❌ | Collection name for vector storage |
-| LANGFUSE_PUBLIC_KEY    | ❌ | Langfuse public key |
-| LANGFUSE_SECRET_KEY    | ❌ | Langfuse secret key |
-| LANGFUSE_HOST          | ❌ | Langfuse host URL |
-| R2_ACCOUNT_ID          | ❌ | Cloudflare R2 account ID |
-| R2_ACCESS_KEY_ID       | ❌ | Cloudflare R2 access key |
-| R2_SECRET_ACCESS_KEY   | ❌ | Cloudflare R2 secret access key |
-| R2_BUCKET              | ❌ | Cloudflare R2 bucket name |
-| CORS_ORIGINS           | ❌ | Allowed frontend origins for CORS |
+```dotenv
+VITE_API_BASE_URL=https://your-backend.example.com
+```
+
+## Configuration
+
+### Backend environment
+
+| Variable | Requirement | Default or purpose |
+|---|---|---|
+| `OPENAI_API_KEY` | Required | Chat, structured generation and embeddings |
+| `GEMINI_API_KEY` | Optional | Fallback for structured JSON generation |
+| `GOOGLE_API_KEY` | Optional | Alternative name for `GEMINI_API_KEY` |
+| `DATABASE_URL` | Optional | Defaults to `sqlite:///./backend/database/insightai.db` |
+| `JWT_SECRET_KEY` | Required in production | Development fallback exists and must not be used in production |
+| `QDRANT_URL` | Optional for local use | Defaults to `http://localhost:6333` |
+| `QDRANT_API_KEY` | Required for protected Qdrant Cloud | Not needed for an unsecured local instance |
+| `QDRANT_COLLECTION` | Optional | Defaults to `insightai_chunks` |
+| `R2_ACCOUNT_ID` | Required for uploads | Cloudflare account identifier |
+| `R2_ACCESS_KEY_ID` | Required for uploads | R2 access key |
+| `R2_SECRET_ACCESS_KEY` | Required for uploads | R2 secret key |
+| `R2_BUCKET` | Required for uploads | R2 bucket name |
+| `LANGFUSE_PUBLIC_KEY` | Optional | Enables observability when all Langfuse values are set |
+| `LANGFUSE_SECRET_KEY` | Optional | Langfuse secret key |
+| `LANGFUSE_HOST` | Optional | Langfuse host URL |
+| `CORS_ORIGINS` | Optional | Comma-separated origins; includes local Vite ports by default |
+| `MAX_UPLOAD_SIZE_MB` | Optional | Positive integer; defaults to `25` |
+
+### Frontend environment
+
+| Variable | Requirement | Default or purpose |
+|---|---|---|
+| `VITE_API_BASE_URL` | Optional locally, required for remote backends | Defaults to `http://localhost:8000` |
+
+Never commit API keys, JWT secrets, R2 credentials or production database URLs.
 
 ## Usage
 
-1. Open the frontend in your browser at [http://localhost:8080](http://localhost:8080).
-2. Register or login
-3. Select or create a workspace
-4. Select your preferred report language in the dashboard.
-5. Upload a document (PDF, CSV, DOCX, TXT)  
-6. Wait for AI processing (status shown in sidebar).  
-7. Click on the document to view the generated report.  
-8. Ask questions about uploaded documents in the chat
+1. Open [http://localhost:8080](http://localhost:8080).
+2. Register or sign in.
+3. Select your personal workspace or create a team workspace.
+4. Choose the report language.
+5. Upload a supported document.
+6. Follow its processing status in the document sidebar.
+7. Open the completed structured report.
+8. Ask questions in workspace-wide or document-specific chat.
 
-## Tech Stack
-### Frontend
-- React
-- TypeScript
-- Tailwind CSS
-- Framer Motion
+## Testing
 
-### Backend
-- FastAPI
-- Python
-- Pydantic
-- SQLAlchemy
+Install frontend dependencies first, activate the backend virtual environment and run:
 
-### AI & Retrieval
-- OpenAI
-- Gemini (Fallback)
-- Retrieval-Augmented Generation (RAG)
-- Qdrant
-- Langfuse
-
-### Infrastructure & Deployment
-- Frontend Hosting: Vercel
-- Backend Deployment: Render
-- Database: Neon PostgreSQL
-- Vector Database: Qdrant Cloud
-- Object Storage: Cloudflare R2
-- Authentication: JWT
-
-## Architecture
-```mermaid
-flowchart TD
-
-A[User Upload] --> B[FastAPI Backend]
-
-B --> C[Document Parsing]
-
-C --> D[Chunking]
-
-D --> E[Embeddings]
-
-E --> F[Qdrant Vector DB]
-
-F --> G[RAG Retrieval]
-
-G --> H[LLM Processing]
-
-H --> I[Structured AI Reports]
-
-H --> J[Workspace AI Chat]
+```bash
+python tests/run_all.py
 ```
 
-## Roadmap (Planned Features)
-- API-connected data ingestion
-- Advanced analytics & visualizations
-- Semantic search improvements
+The test runner performs:
 
-## 🤝 Contributing
-Contributions are welcome! Please follow these steps:
-1.	Fork the repository.
-2. Create a feature branch: git checkout -b feature/my-feature
-3.	Commit your changes: git commit -m 'Add some feature'
-4.	Push to the branch: git push origin feature/my-feature
-5.	Open a Pull Request
+- backend unit and API integration tests
+- frontend Node/SSR component tests
+- TypeScript validation
+- ESLint validation
+- a production frontend build in a temporary directory
+
+Routine tests mock OpenAI, Gemini, Qdrant, R2 and Langfuse instead of calling live services.
+
+Individual checks can also be run directly:
+
+```bash
+python -m unittest discover -s tests/backend -t . -v
+cd frontend
+npm run lint
+npm run build
+```
+
+## Security and Data Boundaries
+
+InsightAI applies several defensive controls:
+
+- workspace membership is checked server-side before sensitive document operations
+- workspace and document filters are applied during retrieval
+- upload extension, size and actual content are validated before R2 storage
+- failed uploads and database commits trigger compensating R2 cleanup attempts
+- document and query embeddings use the same model and vector space
+- CSV SQL is parsed structurally before execution
+- CSV queries are restricted to one statement and the `data` table
+- table functions and external CSV/Parquet readers are rejected
+- generated reports use structured schemas and evidence-oriented prompts
+- observability avoids raw content where the current tracing path supports metadata-only logging
+
+These controls reduce risk but do not replace deployment hardening, secret management, monitoring, backups, malware scanning or an independent security review.
+
+## AI Provider Behavior
+
+- Primary generation model: `gpt-4o-mini`
+- Embedding model: `text-embedding-3-small`
+- Structured-generation fallback: `gemini-2.5-flash`
+- Direct text chat uses OpenAI without an equivalent Gemini fallback.
+- Embeddings intentionally remain OpenAI-only to preserve vector compatibility.
+
+## Technology Stack
+
+| Area | Technologies |
+|---|---|
+| Frontend | React, TypeScript, Vite, Tailwind CSS, Framer Motion |
+| Backend | FastAPI, Python, Pydantic, SQLAlchemy |
+| Text parsing | Docling, PyMuPDF, python-docx, Tiktoken |
+| AI | OpenAI, optional Google Gemini fallback |
+| Retrieval | Qdrant and relational keyword search |
+| Structured data | Pandas, PyArrow, Parquet and DuckDB |
+| Persistence | PostgreSQL or SQLite, Cloudflare R2 |
+| Observability | Optional Langfuse |
+| Deployment | Vercel, Render, Neon, Qdrant Cloud and Cloudflare R2 |
+
+## Project Structure
+
+```text
+InsightAI/
+├── backend/
+│   ├── parsers/               # PDF, DOCX and text parsing
+│   ├── routers/               # FastAPI endpoints
+│   ├── models/                # SQLAlchemy models
+│   └── services/
+│       ├── ingestion/         # Chunking and semantic blocks
+│       ├── vector/            # Qdrant and hybrid retrieval
+│       ├── reporting/         # Structured report generation
+│       ├── csv/               # Parquet, DuckDB, SQL and CSV reports
+│       ├── auth/              # JWT and password handling
+│       ├── storage/           # R2 and upload validation
+│       └── observability/     # Langfuse integration
+├── frontend/src/              # React application
+├── tests/                     # Backend and frontend test suites
+├── docs/                      # Architecture, decisions and project guidance
+├── requirements.txt
+└── render.yaml
+```
+
+## Current Limitations
+
+- CSV-to-Parquet conversion currently loads the complete CSV through Pandas; it is not yet a streaming conversion.
+- Document processing uses FastAPI `BackgroundTasks`, not a persistent job queue.
+- Retrieval quality does not yet have a versioned gold-standard benchmark.
+- The active 800/80 chunk strategy increases embedding and vector volume for long documents.
+- Existing documents must be reprocessed to adopt a changed chunking strategy.
+- TXT and DOCX do not yet preserve the same structural detail as PDF and Markdown.
+- Retrieval does not yet use calibrated rank fusion, a reranker or a measured minimum relevance threshold.
+- Query timeouts and explicit DuckDB CPU/memory limits remain planned hardening work.
+
+## Roadmap
+
+Current priorities include:
+
+- a versioned RAG evaluation dataset with Recall@K, MRR and grounding metrics
+- rank fusion, reranking and relevance thresholds
+- more structure-aware DOCX and TXT chunking
+- precise inline citations and source highlighting
+- persistent background jobs with retry, resume and failure recovery
+- streaming CSV-to-Parquet conversion
+- query timeouts and DuckDB resource limits
+
+## Deployment
+
+A typical hosted setup uses:
+
+- Vercel for the frontend
+- Render for the backend
+- Neon PostgreSQL
+- Qdrant Cloud
+- Cloudflare R2
+
+Set `VITE_API_BASE_URL` to the deployed backend URL and configure `CORS_ORIGINS` with the deployed frontend origin.
+
+## Contributing
+
+Contributions are welcome.
+
+1. Fork the repository.
+2. Create a focused branch:
+
+   ```bash
+   git checkout -b feature/my-feature
+   ```
+
+3. Implement and test the change.
+4. Commit with a descriptive message:
+
+   ```bash
+   git commit -m "feat: describe the change"
+   ```
+
+5. Push the branch and open a pull request.
+
+Please follow the [Code of Conduct](CODE_OF_CONDUCT.md). Keep changes focused, preserve workspace isolation and add proportional tests for changed behavior.
 
 ## License
-This project is licensed under the [MIT License](./LICENSE).
+
+InsightAI is available under the [MIT License](LICENSE).
