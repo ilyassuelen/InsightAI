@@ -230,11 +230,11 @@ class AuthWorkspaceApiTests(unittest.TestCase):
             )
 
         self.assertEqual(valid.status_code, 200)
-        self.assertEqual(valid.json(), {"answer": "Grounded"})
+        self.assertEqual(valid.json()["answer"], "Grounded")
+        self.assertIsInstance(valid.json()["conversation_id"], int)
         self.assertEqual(mismatch.status_code, 400)
         generate.assert_awaited_once()
 
-    @unittest.expectedFailure
     def test_chat_does_not_leak_internal_exception_text(self) -> None:
         workspace = self._personal_workspace_id(self.alice_headers)
         secret = "internal-secret-token-123"
@@ -249,6 +249,145 @@ class AuthWorkspaceApiTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 500)
         self.assertNotIn(secret, response.text)
+
+    def test_chat_conversation_is_persisted_reloaded_and_private(self) -> None:
+        workspace = self._personal_workspace_id(self.alice_headers)
+        alice_id = self._user_id("alice@example.test")
+        document = create_document(
+            workspace,
+            alice_id,
+            filename=f"history-{uuid.uuid4().hex}.txt",
+        )
+        generate = AsyncMock(side_effect=["First answer", "Second answer"])
+
+        with patch(
+            "backend.routers.chat.generate_chat_response",
+            new=generate,
+        ):
+            first = self.client.post(
+                "/chat/",
+                headers=self.alice_headers,
+                json={
+                    "message": "First question",
+                    "workspace_id": workspace,
+                    "document_id": document.id,
+                },
+            )
+            conversation_id = first.json()["conversation_id"]
+            second = self.client.post(
+                "/chat/",
+                headers=self.alice_headers,
+                json={
+                    "message": "Follow-up question",
+                    "workspace_id": workspace,
+                    "document_id": document.id,
+                    "conversation_id": conversation_id,
+                },
+            )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.json()["conversation_id"], conversation_id)
+        self.assertEqual(generate.await_count, 2)
+        self.assertEqual(generate.await_args_list[0].kwargs["history"], [])
+        self.assertEqual(
+            generate.await_args_list[1].kwargs["history"],
+            [
+                {"role": "user", "content": "First question"},
+                {"role": "assistant", "content": "First answer"},
+            ],
+        )
+
+        conversations = self.client.get(
+            "/chat/conversations",
+            headers=self.alice_headers,
+            params={"workspace_id": workspace, "document_id": document.id},
+        )
+        self.assertEqual(conversations.status_code, 200)
+        self.assertIn(
+            conversation_id,
+            [item["id"] for item in conversations.json()],
+        )
+
+        detail = self.client.get(
+            f"/chat/conversations/{conversation_id}",
+            headers=self.alice_headers,
+        )
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(
+            [item["role"] for item in detail.json()["messages"]],
+            ["user", "assistant", "user", "assistant"],
+        )
+        self.assertEqual(
+            [item["sequence_index"] for item in detail.json()["messages"]],
+            [0, 1, 2, 3],
+        )
+
+        self.assertEqual(
+            self.client.get(
+                f"/chat/conversations/{conversation_id}",
+                headers=self.bob_headers,
+            ).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.delete(
+                f"/chat/conversations/{conversation_id}",
+                headers=self.bob_headers,
+            ).status_code,
+            404,
+        )
+
+        deleted = self.client.delete(
+            f"/chat/conversations/{conversation_id}",
+            headers=self.alice_headers,
+        )
+        self.assertEqual(deleted.status_code, 200)
+        self.assertEqual(
+            self.client.get(
+                f"/chat/conversations/{conversation_id}",
+                headers=self.alice_headers,
+            ).status_code,
+            404,
+        )
+
+    def test_chat_rejects_conversation_context_switches(self) -> None:
+        workspace = self._personal_workspace_id(self.alice_headers)
+
+        with patch(
+            "backend.routers.chat.generate_chat_response",
+            new=AsyncMock(return_value="Grounded"),
+        ) as generate:
+            first = self.client.post(
+                "/chat/",
+                headers=self.alice_headers,
+                json={
+                    "message": "Workspace question",
+                    "workspace_id": workspace,
+                    "document_id": None,
+                },
+            )
+            conversation_id = first.json()["conversation_id"]
+
+            alice_id = self._user_id("alice@example.test")
+            document = create_document(
+                workspace,
+                alice_id,
+                filename=f"context-{uuid.uuid4().hex}.txt",
+            )
+            switched = self.client.post(
+                "/chat/",
+                headers=self.alice_headers,
+                json={
+                    "message": "Switch context",
+                    "workspace_id": workspace,
+                    "document_id": document.id,
+                    "conversation_id": conversation_id,
+                },
+            )
+
+        self.assertEqual(switched.status_code, 400)
+        self.assertEqual(generate.await_count, 1)
 
     def test_unauthorized_upload_checks_membership_before_r2_write(self) -> None:
         bob_workspace = self._personal_workspace_id(self.bob_headers)

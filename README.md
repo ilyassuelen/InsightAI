@@ -58,9 +58,12 @@ Users can create personal or shared workspaces, generate structured reports and 
 - **Structured reports:** summaries, sections, key figures, findings, risks, recommendations, charts, timelines and conclusions.
 - **Workspace-scoped access:** personal and shared workspaces with Owner and Member roles.
 - **Document and workspace chat:** retrieve evidence from one document or across authorized workspace documents.
+- **Persistent private conversations:** resume, select and delete user-owned chat histories inside one fixed workspace/document context.
+- **Controlled memory:** bounded recent turns help resolve explicit follow-up questions without becoming document evidence.
 - **Validated uploads:** server-side format, size and content validation before storage.
 - **Controlled chunking:** maximum 800 tokens, 80-token overlap and Unicode-safe boundaries.
 - **Markdown awareness:** ATX and Setext headings create section boundaries; fenced code is excluded from heading detection.
+- **DOCX structure awareness:** heading levels, nested lists and table rows remain visible to retrieval and reporting.
 - **Hybrid retrieval:** semantic Qdrant search combined with relational keyword matching.
 - **Structured CSV analysis:** Parquet storage, DuckDB profiling and exactly one AST-validated query against the `data` table.
 - **Privacy-conscious observability:** optional Langfuse tracing based primarily on hashes, lengths and operational metadata.
@@ -71,7 +74,7 @@ Users can create personal or shared workspaces, generate structured reports and 
 | Format | Parsing and preparation | Analysis path |
 |---|---|---|
 | PDF | Docling, OCR heuristic, contextual headings, 800-token limit | Embeddings, Qdrant and RAG |
-| DOCX | Paragraph extraction and 800/80 token windows | Embeddings, Qdrant and RAG |
+| DOCX | Ordered headings, paragraphs, nested lists and Markdown-like tables; heading-aware 800/80 windows | Embeddings, Qdrant and RAG |
 | TXT | UTF-8 text and 800/80 token windows | Embeddings, Qdrant and RAG |
 | Markdown | Heading-aware sections and 800/80 windows inside each section | Embeddings, Qdrant and RAG |
 | CSV | Validation, Parquet conversion and DuckDB profiling | AST-validated read-only SQL |
@@ -110,7 +113,7 @@ flowchart TD
 2. Store the original object in R2 and create its relational document record.
 3. Parse the document and create Unicode-safe chunks of at most 800 tokens.
 4. Apply 80 tokens of overlap within hard token windows.
-5. Preserve PDF context and Markdown heading metadata where available.
+5. Preserve PDF context, Markdown headings and DOCX heading, list and table structure.
 6. Generate `text-embedding-3-small` embeddings and store them in Qdrant.
 7. Retrieve workspace-authorized evidence for chat and reports.
 8. Generate structured output grounded in the retrieved content.
@@ -124,6 +127,16 @@ flowchart TD
 5. Allow exactly one read-only query and only the unqualified `data` table.
 6. Reject external readers, table functions, additional statements and other tables.
 7. Execute the accepted query and generate an answer from its result.
+
+### Persistent chat and controlled memory
+
+1. A new chat creates a private conversation owned by the current user and fixed to one workspace/document context.
+2. User and assistant messages are stored relationally in deterministic sequence order.
+3. Only the owner can list, open, continue or delete the conversation, and current workspace membership is checked again server-side.
+4. The backend loads at most 20 recent stored messages, but only explicit follow-up questions activate prompt memory.
+5. Prompt memory is limited to 8 messages, 1,200 tokens in total and 300 tokens per message.
+6. Follow-up retrieval may include at most two earlier user questions; assistant answers never become retrieval evidence.
+7. Memory is marked as untrusted context and can resolve references only. Answers remain grounded in retrieved document chunks or executed CSV SQL.
 
 ## Quick Start
 
@@ -274,6 +287,7 @@ Never commit API keys, JWT secrets, R2 credentials or production database URLs.
 6. Follow its processing status in the document sidebar.
 7. Open the completed structured report.
 8. Ask questions in workspace-wide or document-specific chat.
+9. Start, resume or delete private conversations from the chat-history selector.
 
 ## Testing
 
@@ -315,6 +329,8 @@ InsightAI applies several defensive controls:
 - CSV queries are restricted to one statement and the `data` table
 - table functions and external CSV/Parquet readers are rejected
 - generated reports use structured schemas and evidence-oriented prompts
+- chat histories are private to their creator and cannot be moved between workspace or document contexts
+- conversation memory is token-bounded, activated only for explicit follow-ups and marked as untrusted, non-evidentiary context
 - observability avoids raw content where the current tracing path supports metadata-only logging
 
 These controls reduce risk but do not replace deployment hardening, secret management, monitoring, backups, malware scanning or an independent security review.
@@ -368,10 +384,11 @@ InsightAI/
 
 - CSV-to-Parquet conversion currently loads the complete CSV through Pandas; it is not yet a streaming conversion.
 - Document processing uses FastAPI `BackgroundTasks`, not a persistent job queue.
-- Retrieval quality does not yet have a versioned gold-standard benchmark.
+- A versioned synthetic RAG goldset exists, but retrieval and answer-quality baseline metrics have not yet been executed.
 - The active 800/80 chunk strategy increases embedding and vector volume for long documents.
 - Existing documents must be reprocessed to adopt a changed chunking strategy.
-- TXT and DOCX do not yet preserve the same structural detail as PDF and Markdown.
+- TXT does not yet preserve document structure beyond its plain-text content.
+- DOCX tables are normalized for retrieval, but merged cells and advanced Word layout semantics are not reconstructed.
 - Retrieval does not yet use calibrated rank fusion, a reranker or a measured minimum relevance threshold.
 - Query timeouts and explicit DuckDB CPU/memory limits remain planned hardening work.
 
@@ -379,9 +396,9 @@ InsightAI/
 
 Current priorities include:
 
-- a versioned RAG evaluation dataset with Recall@K, MRR and grounding metrics
+- a reproducible Recall@K, MRR and grounding baseline on the versioned RAG goldset
 - rank fusion, reranking and relevance thresholds
-- more structure-aware DOCX and TXT chunking
+- more structure-aware TXT chunking and adaptive boundaries for oversized DOCX sections
 - precise inline citations and source highlighting
 - persistent background jobs with retry, resume and failure recovery
 - streaming CSV-to-Parquet conversion

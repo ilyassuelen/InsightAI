@@ -1,0 +1,21 @@
+Projektstatus Helios
+
+Dieses vollständig synthetische Dokument dient ausschließlich der InsightAI-Evaluation.
+
+ZEITPLAN
+Das Projekt Helios modernisiert die Serviceplattform; es begann am 3. Februar 2025 und der Produktivstart ist für den 17. November 2025 geplant.
+
+BUDGET
+Das genehmigte Budget beträgt 1,8 Mio. EUR; bis zum 31. August 2025 wurden 1,26 Mio. EUR ausgegeben.
+
+MEILENSTEINE
+Die API-Entwicklung ist zu 100 Prozent abgeschlossen, die Datenmigration zu 72 Prozent und die Schulungsvorbereitung zu 35 Prozent.
+
+BLOCKER
+Der Legacy-Export weist bei 2,3 Prozent der Datensätze Fehler auf; verantwortlich ist Mara Stein, eine Entscheidung ist bis zum 15. September 2025 erforderlich.
+
+PILOT
+Am Berliner Pilot nahmen 120 Personen teil und bewerteten die Lösung im Durchschnitt mit 4,4 von 5 Punkten.
+
+NOTFALLPLAN
+Bei einer Verzögerung von mehr als zwei Wochen werden optionale Dashboard-Funktionen eingefroren; der Termin für die Kernfunktionen bleibt bestehen.

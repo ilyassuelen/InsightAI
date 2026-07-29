@@ -343,6 +343,7 @@ const Index = () => {
                 <ChatPreview
                   workspaceId={currentWorkspace?.id}
                   selectedDocumentId={selectedDocument?.id}
+                  selectedDocumentName={selectedDocument?.filename}
                   onClose={() => setShowChat(false)}
                 />
               </motion.div>

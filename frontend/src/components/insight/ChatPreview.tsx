@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Send,
   MessageSquare,
   Bot,
   Sparkles,
-  X
+  X,
+  Plus,
+  Trash2,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -20,8 +22,24 @@ interface ChatPreviewProps {
 }
 
 interface ChatMessage {
+  id?: number;
   role: "user" | "assistant";
   content: string;
+  sequence_index?: number;
+  created_at?: string;
+}
+
+interface ChatConversationSummary {
+  id: number;
+  title: string;
+  workspace_id: number;
+  document_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ChatConversationDetail extends ChatConversationSummary {
+  messages: ChatMessage[];
 }
 
 export function ChatPreview({
@@ -33,9 +51,86 @@ export function ChatPreview({
 }: ChatPreviewProps) {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [conversations, setConversations] = useState<ChatConversationSummary[]>([]);
+  const [conversationId, setConversationId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  const loadConversation = useCallback(async (id: number) => {
+    setHistoryLoading(true);
+    try {
+      const conversation = await apiJson<ChatConversationDetail>(
+        `/chat/conversations/${id}`
+      );
+      setConversationId(conversation.id);
+      setMessages(conversation.messages);
+    } catch (error: unknown) {
+      console.error(error);
+      setConversationId(null);
+      setMessages([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    setConversationId(null);
+    setMessages([]);
+    setConversations([]);
+
+    if (!workspaceId) {
+      return () => {
+        active = false;
+      };
+    }
+
+    const loadConversations = async () => {
+      setHistoryLoading(true);
+      try {
+        const params = new URLSearchParams({
+          workspace_id: String(workspaceId),
+        });
+        if (selectedDocumentId) {
+          params.set("document_id", String(selectedDocumentId));
+        }
+
+        const items = await apiJson<ChatConversationSummary[]>(
+          `/chat/conversations?${params.toString()}`
+        );
+        if (!active) return;
+
+        setConversations(items);
+        if (items.length > 0) {
+          const conversation = await apiJson<ChatConversationDetail>(
+            `/chat/conversations/${items[0].id}`
+          );
+          if (!active) return;
+          setConversationId(conversation.id);
+          setMessages(conversation.messages);
+        }
+      } catch (error: unknown) {
+        if (active) {
+          console.error(error);
+          setConversationId(null);
+          setMessages([]);
+        }
+      } finally {
+        if (active) {
+          setHistoryLoading(false);
+        }
+      }
+    };
+
+    void loadConversations();
+
+    return () => {
+      active = false;
+    };
+  }, [workspaceId, selectedDocumentId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({
@@ -58,11 +153,15 @@ export function ChatPreview({
     setLoading(true);
 
     try {
-      const data = await apiJson<{ answer: string }>("/chat/", {
+      const data = await apiJson<{
+        answer: string;
+        conversation_id: number;
+      }>("/chat/", {
         method: "POST",
         body: JSON.stringify({
           workspace_id: Number(workspaceId),
           document_id: selectedDocumentId ? Number(selectedDocumentId) : null,
+          conversation_id: conversationId,
           message: userMessage.content,
         }),
       });
@@ -73,9 +172,28 @@ export function ChatPreview({
       };
 
       setMessages((prev) => [...prev, botMessage]);
+      setConversationId(data.conversation_id);
+      setConversations((prev) => {
+        const existing = prev.find(
+          (item) => item.id === data.conversation_id
+        );
+        const now = new Date().toISOString();
+        const updated: ChatConversationSummary = existing ?? {
+          id: data.conversation_id,
+          title: userMessage.content.trim().replace(/\s+/g, " ").slice(0, 80),
+          workspace_id: Number(workspaceId),
+          document_id: selectedDocumentId ? Number(selectedDocumentId) : null,
+          created_at: now,
+          updated_at: now,
+        };
+        return [
+          { ...updated, updated_at: now },
+          ...prev.filter((item) => item.id !== data.conversation_id),
+        ];
+      });
 
-    } catch (err: any) {
-      console.error(err);
+    } catch (error: unknown) {
+      console.error(error);
 
       setMessages((prev) => [
         ...prev,
@@ -89,7 +207,36 @@ export function ChatPreview({
     }
   };
 
-  const isDisabled = !workspaceId || loading;
+  const startNewConversation = () => {
+    setConversationId(null);
+    setMessages([]);
+    setMessage("");
+  };
+
+  const deleteCurrentConversation = async () => {
+    if (!conversationId) return;
+    if (!window.confirm("Delete this conversation permanently?")) return;
+
+    try {
+      await apiJson<{ message: string }>(
+        `/chat/conversations/${conversationId}`,
+        { method: "DELETE" }
+      );
+      const remaining = conversations.filter(
+        (item) => item.id !== conversationId
+      );
+      setConversations(remaining);
+      if (remaining.length > 0) {
+        await loadConversation(remaining[0].id);
+      } else {
+        startNewConversation();
+      }
+    } catch (error: unknown) {
+      console.error(error);
+    }
+  };
+
+  const isDisabled = !workspaceId || loading || historyLoading;
 
   return (
     <motion.div
@@ -170,8 +317,56 @@ export function ChatPreview({
         </div>
       </div>
 
+      <div className="relative z-10 flex items-center gap-2 border-b border-white/10 bg-background/20 px-4 py-2">
+        <select
+          value={conversationId ?? ""}
+          onChange={(event) => {
+            const id = Number(event.target.value);
+            if (id) {
+              void loadConversation(id);
+            } else {
+              startNewConversation();
+            }
+          }}
+          disabled={!workspaceId || historyLoading}
+          aria-label="Chat history"
+          className="min-w-0 flex-1 truncate rounded-xl border border-white/10 bg-background/50 px-3 py-2 text-xs text-foreground outline-none transition focus:border-primary/40 disabled:opacity-50"
+        >
+          <option value="">New conversation</option>
+          {conversations.map((conversation) => (
+            <option key={conversation.id} value={conversation.id}>
+              {conversation.title}
+            </option>
+          ))}
+        </select>
+
+        <button
+          type="button"
+          onClick={startNewConversation}
+          disabled={!workspaceId || loading}
+          aria-label="New conversation"
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-background/50 text-muted-foreground transition hover:text-foreground disabled:opacity-50"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => void deleteCurrentConversation()}
+          disabled={!conversationId || loading}
+          aria-label="Delete conversation"
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-background/50 text-muted-foreground transition hover:border-red-500/30 hover:text-red-300 disabled:opacity-50"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+
       <div className="relative z-10 flex-1 overflow-y-auto p-4">
-        {messages.length === 0 ? (
+        {historyLoading ? (
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            Loading conversation...
+          </div>
+        ) : messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <motion.div
               initial={{ scale: 0.92, opacity: 0 }}
@@ -280,7 +475,7 @@ export function ChatPreview({
 
           <button
             type="submit"
-            disabled={!workspaceId || !message.trim() || loading}
+            disabled={!workspaceId || !message.trim() || loading || historyLoading}
             className={cn(
               "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl gradient-bg text-primary-foreground shadow-lg shadow-primary/20 transition-all",
               "hover:scale-105 hover:opacity-95",

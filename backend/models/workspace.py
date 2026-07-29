@@ -31,3 +31,10 @@ class Workspace(Base):
         cascade="all, delete-orphan",
         passive_deletes=True
     )
+
+    chat_conversations = relationship(
+        "ChatConversation",
+        back_populates="workspace",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

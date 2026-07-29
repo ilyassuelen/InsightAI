@@ -34,7 +34,20 @@ test("chat submits numeric workspace and nullable document identifiers", async (
   const code = await source("components/insight/ChatPreview.tsx");
   assert.match(code, /workspace_id:\s*Number\(workspaceId\)/);
   assert.match(code, /document_id:\s*selectedDocumentId\s*\?\s*Number\(selectedDocumentId\)\s*:\s*null/);
-  assert.match(code, /apiJson<\{ answer: string \}>\("\/chat\/"/);
+  assert.match(code, /conversation_id:\s*conversationId/);
+  assert.match(code, /conversation_id:\s*number/);
+  assert.match(code, />\("\/chat\/"/);
+});
+
+
+test("chat loads, selects and deletes persistent conversations", async () => {
+  const code = await source("components/insight/ChatPreview.tsx");
+  assert.match(code, /\/chat\/conversations\?\$\{params\.toString\(\)\}/);
+  assert.match(code, /\/chat\/conversations\/\$\{items\[0\]\.id\}/);
+  assert.match(code, /method:\s*"DELETE"/);
+  assert.match(code, /aria-label="Chat history"/);
+  assert.match(code, /aria-label="New conversation"/);
+  assert.match(code, /aria-label="Delete conversation"/);
 });
 
 
@@ -52,7 +65,7 @@ test.todo("legacy useReports uses apiFetch instead of unauthenticated hard-coded
 });
 
 
-test.todo("Index passes the selected document name into ChatPreview", async () => {
+test("Index passes the selected document name into ChatPreview", async () => {
   const code = await source("pages/Index.tsx");
   assert.equal(/selectedDocumentName=\{selectedDocument\?\.filename\}/.test(code), true);
 });

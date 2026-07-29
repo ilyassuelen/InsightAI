@@ -10,6 +10,8 @@ from backend.models.document_block import DocumentBlock  # noqa: F401
 from backend.models.document_chunk import DocumentChunk  # noqa: F401
 from backend.models.document_parse import DocumentParse  # noqa: F401
 from backend.models.report import Report  # noqa: F401
+from backend.models.chat_conversation import ChatConversation  # noqa: F401
+from backend.models.chat_message import ChatMessage  # noqa: F401
 from backend.models.user import User
 from backend.models.workspace import Workspace
 from backend.models.workspace_member import WorkspaceMember

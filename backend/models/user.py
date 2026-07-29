@@ -14,3 +14,9 @@ class User(Base):
 
     workspaces = relationship("WorkspaceMember", back_populates="user", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="uploaded_by")
+    chat_conversations = relationship(
+        "ChatConversation",
+        back_populates="created_by",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

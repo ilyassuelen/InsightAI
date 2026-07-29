@@ -1,0 +1,290 @@
+[
+  {
+    "id": "FIN-001",
+    "document_id": "nordstern-annual-2025",
+    "section": "Umsatzentwicklung",
+    "line_start": 7,
+    "line_end": 7,
+    "quote": "Der Umsatz stieg von 42,0 Mio. EUR im Jahr 2024 auf 48,6 Mio. EUR im Jahr 2025."
+  },
+  {
+    "id": "FIN-002",
+    "document_id": "nordstern-annual-2025",
+    "section": "Ergebnis",
+    "line_start": 11,
+    "line_end": 11,
+    "quote": "Das operative Ergebnis betrug 6,8 Mio. EUR; die operative Marge lag bei 14,0 Prozent."
+  },
+  {
+    "id": "FIN-003",
+    "document_id": "nordstern-annual-2025",
+    "section": "Regionen",
+    "line_start": 15,
+    "line_end": 15,
+    "quote": "Die Region Nord erzielte 21,4 Mio. EUR Umsatz, Süd 16,2 Mio. EUR und International 11,0 Mio. EUR."
+  },
+  {
+    "id": "FIN-004",
+    "document_id": "nordstern-annual-2025",
+    "section": "Personal",
+    "line_start": 19,
+    "line_end": 19,
+    "quote": "Zum Jahresende beschäftigte Nordstern 312 Personen, stellte 46 neue Mitarbeitende ein und verzeichnete eine Fluktuationsquote von 7,1 Prozent."
+  },
+  {
+    "id": "FIN-005",
+    "document_id": "nordstern-annual-2025",
+    "section": "Lieferkettenrisiko",
+    "line_start": 23,
+    "line_end": 23,
+    "quote": "Für das Bauteil NX-4 besteht eine Abhängigkeit vom Einzellieferanten Nexo Components; als Gegenmaßnahme ist eine zweite Bezugsquelle bis zum zweiten Quartal 2026 vorgesehen."
+  },
+  {
+    "id": "FIN-006",
+    "document_id": "nordstern-annual-2025",
+    "section": "Energieprojekt",
+    "line_start": 27,
+    "line_end": 27,
+    "quote": "Investitionen von 2,4 Mio. EUR in Solaranlagen sollen den externen Energiebezug gegenüber 2025 um 18 Prozent senken."
+  },
+  {
+    "id": "PRJ-001",
+    "document_id": "helios-project-status",
+    "section": "ZEITPLAN",
+    "line_start": 6,
+    "line_end": 6,
+    "quote": "Das Projekt Helios modernisiert die Serviceplattform; es begann am 3. Februar 2025 und der Produktivstart ist für den 17. November 2025 geplant."
+  },
+  {
+    "id": "PRJ-002",
+    "document_id": "helios-project-status",
+    "section": "BUDGET",
+    "line_start": 9,
+    "line_end": 9,
+    "quote": "Das genehmigte Budget beträgt 1,8 Mio. EUR; bis zum 31. August 2025 wurden 1,26 Mio. EUR ausgegeben."
+  },
+  {
+    "id": "PRJ-003",
+    "document_id": "helios-project-status",
+    "section": "MEILENSTEINE",
+    "line_start": 12,
+    "line_end": 12,
+    "quote": "Die API-Entwicklung ist zu 100 Prozent abgeschlossen, die Datenmigration zu 72 Prozent und die Schulungsvorbereitung zu 35 Prozent."
+  },
+  {
+    "id": "PRJ-004",
+    "document_id": "helios-project-status",
+    "section": "BLOCKER",
+    "line_start": 15,
+    "line_end": 15,
+    "quote": "Der Legacy-Export weist bei 2,3 Prozent der Datensätze Fehler auf; verantwortlich ist Mara Stein, eine Entscheidung ist bis zum 15. September 2025 erforderlich."
+  },
+  {
+    "id": "PRJ-005",
+    "document_id": "helios-project-status",
+    "section": "PILOT",
+    "line_start": 18,
+    "line_end": 18,
+    "quote": "Am Berliner Pilot nahmen 120 Personen teil und bewerteten die Lösung im Durchschnitt mit 4,4 von 5 Punkten."
+  },
+  {
+    "id": "PRJ-006",
+    "document_id": "helios-project-status",
+    "section": "NOTFALLPLAN",
+    "line_start": 21,
+    "line_end": 21,
+    "quote": "Bei einer Verzögerung von mehr als zwei Wochen werden optionale Dashboard-Funktionen eingefroren; der Termin für die Kernfunktionen bleibt bestehen."
+  },
+  {
+    "id": "SEC-001",
+    "document_id": "verdant-security-policy",
+    "section": "Mehrfaktor-Authentifizierung",
+    "line_start": 7,
+    "line_end": 7,
+    "quote": "Mehrfaktor-Authentifizierung ist für alle Administrationskonten sowie für alle Benutzerkonten mit Zugriff auf vertrauliche Daten verpflichtend."
+  },
+  {
+    "id": "SEC-002",
+    "document_id": "verdant-security-policy",
+    "section": "Aufbewahrung",
+    "line_start": 11,
+    "line_end": 11,
+    "quote": "Operative Sicherheitsprotokolle werden 180 Tage und revisionsrelevante Auditprotokolle 365 Tage aufbewahrt."
+  },
+  {
+    "id": "SEC-003",
+    "document_id": "verdant-security-policy",
+    "section": "Sicherheitsvorfälle",
+    "line_start": 15,
+    "line_end": 15,
+    "quote": "Kritische Vorfälle müssen innerhalb von 15 Minuten gemeldet werden; bei betroffenen personenbezogenen Daten ist zusätzlich die Datenschutzbeauftragte zu informieren."
+  },
+  {
+    "id": "SEC-004",
+    "document_id": "verdant-security-policy",
+    "section": "Verschlüsselung",
+    "line_start": 19,
+    "line_end": 19,
+    "quote": "Datenübertragung erfordert mindestens TLS 1.2, während gespeicherte Daten mit AES-256 verschlüsselt werden."
+  },
+  {
+    "id": "SEC-005",
+    "document_id": "verdant-security-policy",
+    "section": "Lieferanten",
+    "line_start": 23,
+    "line_end": 23,
+    "quote": "Kritische Dienstleister werden jährlich sicherheitsgeprüft und benötigen vor der Verarbeitung personenbezogener Daten eine gültige Auftragsverarbeitungsvereinbarung."
+  },
+  {
+    "id": "SEC-006",
+    "document_id": "verdant-security-policy",
+    "section": "Geheimnisse",
+    "line_start": 27,
+    "line_end": 27,
+    "quote": "Passwörter, API-Schlüssel und Tokens dürfen nicht in Dokumenten gespeichert werden; offengelegte Geheimnisse müssen innerhalb von vier Stunden rotiert werden."
+  },
+  {
+    "id": "PROD-001",
+    "document_id": "orion-product-launch",
+    "section": "Einführungstermin",
+    "line_start": 7,
+    "line_end": 7,
+    "quote": "Orion wird am 10. März 2026 gleichzeitig in Deutschland und Österreich eingeführt."
+  },
+  {
+    "id": "PROD-002",
+    "document_id": "orion-product-launch",
+    "section": "Zielgruppe",
+    "line_start": 11,
+    "line_end": 11,
+    "quote": "Das Produkt richtet sich an mittelständische Unternehmen mit 50 bis 500 Beschäftigten, insbesondere an Leitungen aus Betrieb und Finanzen."
+  },
+  {
+    "id": "PROD-003",
+    "document_id": "orion-product-launch",
+    "section": "Preise",
+    "line_start": 15,
+    "line_end": 15,
+    "quote": "Starter kostet 79 EUR pro Monat für bis zu fünf Benutzer; Professional kostet 249 EUR pro Monat für bis zu 25 Benutzer."
+  },
+  {
+    "id": "PROD-004",
+    "document_id": "orion-product-launch",
+    "section": "Beta",
+    "line_start": 19,
+    "line_end": 19,
+    "quote": "An der Beta nahmen 38 Organisationen teil, die wöchentliche Aktivierungsquote lag bei 71 Prozent und der häufigste Wunsch waren planbare Exporte."
+  },
+  {
+    "id": "PROD-005",
+    "document_id": "orion-product-launch",
+    "section": "Freigabekriterien",
+    "line_start": 23,
+    "line_end": 23,
+    "quote": "Für die Einführung sind mindestens 99,8 Prozent absturzfreie Sitzungen, eine P95-Antwortzeit unter 1,5 Sekunden und null offene Vorfälle der Schwereklasse 1 erforderlich."
+  },
+  {
+    "id": "PROD-006",
+    "document_id": "orion-product-launch",
+    "section": "Kampagne",
+    "line_start": 27,
+    "line_end": 27,
+    "quote": "Partner-Webinare sind für den 22. Januar und 19. Februar 2026 angesetzt; die öffentliche Kampagne beginnt am 24. Februar 2026."
+  },
+  {
+    "id": "HR-001",
+    "document_id": "atlas-hr-handbook",
+    "section": "URLAUB",
+    "line_start": 6,
+    "line_end": 6,
+    "quote": "Vollzeitbeschäftigte erhalten 30 Urlaubstage pro Kalenderjahr; Anträge sollen mindestens 14 Kalendertage vor Urlaubsbeginn eingereicht werden."
+  },
+  {
+    "id": "HR-002",
+    "document_id": "atlas-hr-handbook",
+    "section": "MOBILES ARBEITEN",
+    "line_start": 9,
+    "line_end": 9,
+    "quote": "Mobiles Arbeiten ist an bis zu drei Tagen pro Woche möglich; Dienstag und Donnerstag sind gemeinsame Präsenztage."
+  },
+  {
+    "id": "HR-003",
+    "document_id": "atlas-hr-handbook",
+    "section": "WEITERBILDUNG",
+    "line_start": 12,
+    "line_end": 12,
+    "quote": "Das jährliche Weiterbildungsbudget beträgt 1.200 EUR pro Person; einzelne Ausgaben über 400 EUR benötigen eine vorherige Genehmigung."
+  },
+  {
+    "id": "HR-004",
+    "document_id": "atlas-hr-handbook",
+    "section": "PROBEZEIT",
+    "line_start": 15,
+    "line_end": 15,
+    "quote": "Während der Probezeit finden strukturierte Feedbackgespräche in der sechsten Woche und im fünften Monat statt."
+  },
+  {
+    "id": "HR-005",
+    "document_id": "atlas-hr-handbook",
+    "section": "RÜCKKEHR NACH ELTERNZEIT",
+    "line_start": 18,
+    "line_end": 18,
+    "quote": "Nach der Elternzeit ist eine vierwöchige Wiedereinstiegsphase vorgesehen; Teilzeitwünsche sollen acht Wochen vor der Rückkehr gemeldet werden."
+  },
+  {
+    "id": "HR-006",
+    "document_id": "atlas-hr-handbook",
+    "section": "DIENSTREISEN",
+    "line_start": 21,
+    "line_end": 21,
+    "quote": "Für Strecken unter 600 Kilometern ist die Bahn zu bevorzugen; Flüge werden in Economy gebucht und Belege müssen innerhalb von zehn Tagen eingereicht werden."
+  },
+  {
+    "id": "SUS-001",
+    "document_id": "lumen-sustainability-2025",
+    "section": "Emissionen",
+    "line_start": 7,
+    "line_end": 7,
+    "quote": "Die Scope-1- und Scope-2-Emissionen sanken von 1.250 Tonnen CO2e im Basisjahr 2023 auf 890 Tonnen CO2e im Jahr 2025."
+  },
+  {
+    "id": "SUS-002",
+    "document_id": "lumen-sustainability-2025",
+    "section": "Klimaziel",
+    "line_start": 11,
+    "line_end": 11,
+    "quote": "Lumen will die Scope-1- und Scope-2-Emissionen bis 2028 gegenüber 2023 um 45 Prozent reduzieren."
+  },
+  {
+    "id": "SUS-003",
+    "document_id": "lumen-sustainability-2025",
+    "section": "Strom",
+    "line_start": 15,
+    "line_end": 15,
+    "quote": "Der Anteil erneuerbarer Elektrizität stieg von 61 Prozent im Jahr 2024 auf 82 Prozent im Jahr 2025."
+  },
+  {
+    "id": "SUS-004",
+    "document_id": "lumen-sustainability-2025",
+    "section": "Abfall",
+    "line_start": 19,
+    "line_end": 19,
+    "quote": "Im Jahr 2025 entstanden 96 Tonnen Abfall; die Recyclingquote betrug 74 Prozent."
+  },
+  {
+    "id": "SUS-005",
+    "document_id": "lumen-sustainability-2025",
+    "section": "Lieferkette",
+    "line_start": 23,
+    "line_end": 23,
+    "quote": "Die Nachhaltigkeitsabfrage deckte Lieferanten mit 68 Prozent des Einkaufsvolumens ab; 41 Prozent dieser Lieferanten meldeten eigene Emissionsdaten."
+  },
+  {
+    "id": "SUS-006",
+    "document_id": "lumen-sustainability-2025",
+    "section": "Fuhrpark",
+    "line_start": 27,
+    "line_end": 27,
+    "quote": "Von 46 Fahrzeugen waren Ende 2025 insgesamt 18 vollelektrisch; bis Ende 2026 sollen es 30 sein."
+  }
+]

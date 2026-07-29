@@ -37,3 +37,9 @@ class Document(Base):
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
     blocks = relationship("DocumentBlock", back_populates="document", cascade="all, delete-orphan")
     reports = relationship("Report", back_populates="document", cascade="all, delete-orphan")
+    chat_conversations = relationship(
+        "ChatConversation",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
