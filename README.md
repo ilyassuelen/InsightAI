@@ -329,6 +329,8 @@ InsightAI applies several defensive controls:
 - CSV queries are restricted to one statement and the `data` table
 - table functions and external CSV/Parquet readers are rejected
 - generated reports use structured schemas and evidence-oriented prompts
+- document evidence and derived report drafts are explicitly marked as untrusted data rather than instructions
+- report headings are fixed server-side and reported source IDs are validated against retrieved chunks
 - chat histories are private to their creator and cannot be moved between workspace or document contexts
 - conversation memory is token-bounded, activated only for explicit follow-ups and marked as untrusted, non-evidentiary context
 - observability avoids raw content where the current tracing path supports metadata-only logging

@@ -55,6 +55,35 @@ class ReportHelperTests(unittest.TestCase):
         self.assertEqual(report.title, "Report")
         self.assertEqual(report.key_figures, [])
 
+    def test_report_sources_use_only_retrieved_ids_and_metadata(self) -> None:
+        retrieved = [
+            {
+                "chunk_id": "real",
+                "page_start": 4,
+                "page_end": 5,
+                "section_title": "Revenue",
+            }
+        ]
+        model_sources = [
+            {
+                "chunk_id": "real",
+                "page_start": 999,
+                "page_end": 999,
+                "section_title": "Forged",
+            },
+            {
+                "chunk_id": "fabricated",
+                "page_start": 1,
+                "page_end": 1,
+                "section_title": "Secret",
+            },
+        ]
+
+        self.assertEqual(
+            report_service.validate_report_sources(model_sources, retrieved),
+            retrieved,
+        )
+
 
 class ReportGenerationTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -97,7 +126,6 @@ class ReportGenerationTests(unittest.TestCase):
         self.assertLessEqual(len(section.sources), 15)
         self.assertLessEqual(len(generate.call_args.kwargs["user_prompt"]), 13000)
 
-    @unittest.expectedFailure
     def test_model_cannot_return_sources_outside_retrieved_evidence(self) -> None:
         hits = [{"id": "real", "text": "Evidence", "metadata": {}, "score": 0.9}]
         forged = [{"chunk_id": "fabricated", "page_start": None, "page_end": None, "section_title": None}]
